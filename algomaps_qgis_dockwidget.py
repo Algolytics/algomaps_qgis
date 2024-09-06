@@ -24,21 +24,28 @@
 
 import os
 
-from qgis.PyQt import uic
-from qgis.PyQt import QtWidgets
+from qgis.PyQt import QtGui, QtWidgets, uic
+from qgis.PyQt.QtCore import pyqtSignal
 
 # This loads your .ui file so that PyQt can populate your plugin with the elements from Qt Designer
 FORM_CLASS, _ = uic.loadUiType(os.path.join(
-    os.path.dirname(__file__), 'algomaps_qgis_dialog_base.ui'))
+    os.path.dirname(__file__), 'algomaps_qgis_dockwidget_base.ui'))
 
 
-class AlgoMapsPluginDialog(QtWidgets.QDialog, FORM_CLASS):
+class AlgoMapsPluginDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
+
+    closingPlugin = pyqtSignal()
+
     def __init__(self, parent=None):
         """Constructor."""
-        super(AlgoMapsPluginDialog, self).__init__(parent)
-        # Set up the user interface from Designer through FORM_CLASS.
-        # After self.setupUi() you can access any designer object by doing
+        super(AlgoMapsPluginDockWidget, self).__init__(parent)
+        # Set up the user interface from Designer.
+        # After setupUI you can access any designer object by doing
         # self.<objectname>, and you can use autoconnect slots - see
-        # http://qt-project.org/doc/qt-4.8/designer-using-a-ui-file.html
+        # http://doc.qt.io/qt-5/designer-using-a-ui-file.html
         # #widgets-and-dialogs-with-auto-connect
         self.setupUi(self)
+
+    def closeEvent(self, event):
+        self.closingPlugin.emit()
+        event.accept()

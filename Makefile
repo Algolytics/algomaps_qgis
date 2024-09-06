@@ -38,15 +38,15 @@ LOCALES =
 # translation
 SOURCES = \
 	__init__.py \
-	algomaps_qgis.py algomaps_qgis_dialog.py
+	algomaps_qgis.py algomaps_qgis_dockwidget.py
 
 PLUGINNAME = algomaps_qgis
 
 PY_FILES = \
 	__init__.py \
-	algomaps_qgis.py algomaps_qgis_dialog.py
+	algomaps_qgis.py algomaps_qgis_dockwidget.py
 
-UI_FILES = algomaps_qgis_dialog_base.ui
+UI_FILES = algomaps_qgis_dockwidget_base.ui
 
 EXTRAS = metadata.txt icon.png
 

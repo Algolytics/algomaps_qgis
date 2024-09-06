@@ -21,14 +21,15 @@
  *                                                                         *
  ***************************************************************************/
 """
-from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication
+from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication, Qt
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction
 
 # Initialize Qt resources from file resources.py
 from .resources import *
-# Import the code for the dialog
-from .algomaps_qgis_dialog import AlgoMapsPluginDialog
+
+# Import the code for the DockWidget
+from .algomaps_qgis_dockwidget import AlgoMapsPluginDockWidget
 import os.path
 
 
@@ -62,10 +63,15 @@ class AlgoMapsPlugin:
         # Declare instance attributes
         self.actions = []
         self.menu = self.tr(u'&AlgoMaps')
+        
+        # TODO: We are going to let the user set this up in a future iteration
+        self.toolbar = self.iface.addToolBar(u'AlgoMapsPlugin')
+        self.toolbar.setObjectName(u'AlgoMapsPlugin')
 
-        # Check if plugin was started the first time in current QGIS session
-        # Must be set in initGui() to survive plugin reloads
-        self.first_start = None
+        #print "** INITIALIZING AlgoMapsPlugin"
+
+        self.pluginIsActive = False
+        self.dockwidget = None
 
     # noinspection PyMethodMayBeStatic
     def tr(self, message):
@@ -145,8 +151,7 @@ class AlgoMapsPlugin:
             action.setWhatsThis(whats_this)
 
         if add_to_toolbar:
-            # Adds plugin icon to Plugins toolbar
-            self.iface.addToolBarIcon(action)
+            self.toolbar.addAction(action)
 
         if add_to_menu:
             self.iface.addPluginToMenu(
@@ -166,9 +171,24 @@ class AlgoMapsPlugin:
             text=self.tr(u'AlgoMaps - standaryzacja i geokodowanie adresów'),
             callback=self.run,
             parent=self.iface.mainWindow())
+        # # will be set False in run()
+        # self.first_start = True
 
-        # will be set False in run()
-        self.first_start = True
+    def onClosePlugin(self):
+        """Cleanup necessary items here when plugin dockwidget is closed"""
+
+        #print "** CLOSING AlgoMapsPlugin"
+
+        # disconnects
+        self.dockwidget.closingPlugin.disconnect(self.onClosePlugin)
+
+        # remove this statement if dockwidget is to remain
+        # for reuse if plugin is reopened
+        # Commented next statement since it causes QGIS crashe
+        # when closing the docked window:
+        # self.dockwidget = None
+
+        self.pluginIsActive = False
 
 
     def unload(self):
@@ -178,23 +198,29 @@ class AlgoMapsPlugin:
                 self.tr(u'&AlgoMaps'),
                 action)
             self.iface.removeToolBarIcon(action)
+        # remove the toolbar
+        del self.toolbar
 
 
     def run(self):
-        """Run method that performs all the real work"""
+        """Run method that loads and starts the plugin"""
 
-        # Create the dialog with elements (after translation) and keep reference
-        # Only create GUI ONCE in callback, so that it will only load when the plugin is started
-        if self.first_start == True:
-            self.first_start = False
-            self.dlg = AlgoMapsPluginDialog()
+        if not self.pluginIsActive:
+            self.pluginIsActive = True
 
-        # show the dialog
-        self.dlg.show()
-        # Run the dialog event loop
-        result = self.dlg.exec_()
-        # See if OK was pressed
-        if result:
-            # Do something useful here - delete the line containing pass and
-            # substitute with your code.
-            pass
+            #print "** STARTING AlgoMapsPlugin"
+
+            # dockwidget may not exist if:
+            #    first run of plugin
+            #    removed on close (see self.onClosePlugin method)
+            if self.dockwidget == None:
+                # Create the dockwidget (after translation) and keep reference
+                self.dockwidget = AlgoMapsPluginDockWidget()
+
+            # connect to provide cleanup on closing of dockwidget
+            self.dockwidget.closingPlugin.connect(self.onClosePlugin)
+
+            # show the dockwidget
+            # TODO: fix to allow choice of dock location
+            self.iface.addDockWidget(Qt.RightDockWidgetArea, self.dockwidget)
+            self.dockwidget.show()
