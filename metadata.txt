@@ -4,7 +4,7 @@
 
 [general]
 name=AlgoMaps
-qgisMinimumVersion=3.0
+qgisMinimumVersion=3.12
 description=Plugin Algolytics do standaryzacji danych adresowych i geokodowania
 version=0.1
 author=Algolytics Technologies
