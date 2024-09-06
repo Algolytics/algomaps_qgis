@@ -25,6 +25,12 @@ from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication, Qt
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction
 
+from qgis.core import (
+    Qgis,
+    QgsMessageLog,
+    QgsProject,
+)
+
 # Initialize Qt resources from file resources.py
 from .resources import *
 
@@ -32,6 +38,9 @@ from .resources import *
 from .algomaps_qgis_dockwidget import AlgoMapsPluginDockWidget
 import os.path
 
+import json
+
+CONFIG_PATH = 'dq_config.json'
 
 class AlgoMapsPlugin:
     """QGIS Plugin Implementation."""
@@ -46,9 +55,12 @@ class AlgoMapsPlugin:
         """
         # Save reference to the QGIS interface
         self.iface = iface
-        # initialize plugin directory
+
+        # Initialize plugin directory
         self.plugin_dir = os.path.dirname(__file__)
-        # initialize locale
+        self.config_path = os.path.join(self.plugin_dir, CONFIG_PATH)
+
+        # Initialize locale
         locale = QSettings().value('locale/userLocale')[0:2]
         locale_path = os.path.join(
             self.plugin_dir,
@@ -68,10 +80,26 @@ class AlgoMapsPlugin:
         self.toolbar = self.iface.addToolBar(u'AlgoMapsPlugin')
         self.toolbar.setObjectName(u'AlgoMapsPlugin')
 
-        #print "** INITIALIZING AlgoMapsPlugin"
-
         self.pluginIsActive = False
         self.dockwidget = None
+        self.qproj = None
+
+        # Read config file
+        try:
+
+            with open(self.config_path) as f:
+                conf = json.load(f)
+
+            self.dq_user = conf.get('dq_user')
+            self.dq_token = conf.get('dq_token')
+            self.api_key = conf.get('api_key')
+
+            config_str = str([self.dq_user, self.dq_token, self.api_key])
+
+            QgsMessageLog.logMessage(config_str, tag='AlgoMaps', level=Qgis.MessageLevel.Info)
+        except Exception as e:
+            QgsMessageLog.logMessage('Cannot read config file', tag='AlgoMaps', level=Qgis.MessageLevel.Critical)
+            QgsMessageLog.logMessage(repr(e), tag='AlgoMaps', level=Qgis.MessageLevel.Critical)
 
     # noinspection PyMethodMayBeStatic
     def tr(self, message):
@@ -173,6 +201,7 @@ class AlgoMapsPlugin:
             parent=self.iface.mainWindow())
         # # will be set False in run()
         # self.first_start = True
+        self.qproj = QgsProject.instance()
 
     def onClosePlugin(self):
         """Cleanup necessary items here when plugin dockwidget is closed"""
@@ -198,7 +227,7 @@ class AlgoMapsPlugin:
                 self.tr(u'&AlgoMaps'),
                 action)
             self.iface.removeToolBarIcon(action)
-        # remove the toolbar
+        # Remove the toolbar
         del self.toolbar
 
 
@@ -208,14 +237,22 @@ class AlgoMapsPlugin:
         if not self.pluginIsActive:
             self.pluginIsActive = True
 
-            #print "** STARTING AlgoMapsPlugin"
-
             # dockwidget may not exist if:
             #    first run of plugin
             #    removed on close (see self.onClosePlugin method)
-            if self.dockwidget == None:
+            if self.dockwidget is None:
                 # Create the dockwidget (after translation) and keep reference
                 self.dockwidget = AlgoMapsPluginDockWidget()
+
+                # Fill the `config.json` values into UI
+                self.populate_dq_api_settings_ui()
+
+                # Connect the buttons
+                self.dockwidget.btn_settings_save.clicked.connect(self.save_settings)
+                self.dockwidget.btn_settings_reset.clicked.connect(self.reset_settings)
+
+                self.dockwidget.btn_geocode_general.clicked.connect(self.geocode_general)
+                self.dockwidget.btn_geocode_details.clicked.connect(self.geocode_details)
 
             # connect to provide cleanup on closing of dockwidget
             self.dockwidget.closingPlugin.connect(self.onClosePlugin)
@@ -224,3 +261,55 @@ class AlgoMapsPlugin:
             # TODO: fix to allow choice of dock location
             self.iface.addDockWidget(Qt.RightDockWidgetArea, self.dockwidget)
             self.dockwidget.show()
+
+
+
+    def populate_dq_api_settings_ui(self):
+        self.dockwidget.txt_dq_user.setText(self.dq_user)
+        self.dockwidget.txt_dq_token.setText(self.dq_token)
+        self.dockwidget.txt_api_key.setText(self.api_key)
+
+    def populate_checkbox_settings_ui(self):
+        #TODO
+        pass
+
+    def reset_settings(self):
+        # Set previous DQ/API data
+        self.populate_dq_api_settings_ui()
+
+        # Set default checkbox values
+        self.populate_checkbox_settings_ui()  # TODO
+
+        QgsMessageLog.logMessage("Reset ustawień.", tag='AlgoMaps', level=Qgis.MessageLevel.Info)
+
+    def save_settings(self):
+        try:
+            # Save new DQ/API data
+            new_settings = {
+                "dq_user": self.dockwidget.txt_dq_user.text(),
+                "dq_token": self.dockwidget.txt_dq_token.text(),
+                "api_key": self.dockwidget.txt_api_key.text(),
+            }
+
+            with open(self.config_path, 'w') as f:
+                json.dump(new_settings, f)
+
+            self.dq_user = new_settings['dq_user']
+            self.dq_token = new_settings['dq_token']
+            self.api_key = new_settings['api_key']
+
+            # Save the checkbox values
+            # TODO
+
+            QgsMessageLog.logMessage("Zapisano ustawienia", tag='AlgoMaps', level=Qgis.MessageLevel.Success)
+
+        except:
+            QgsMessageLog.logMessage("Zapis ustawień nie powiódł się", tag='AlgoMaps', level=Qgis.MessageLevel.Warning)
+
+    def geocode_general(self):
+        QgsMessageLog.logMessage("Geokoduj (jedno pole adresowe)", tag='AlgoMaps', level=Qgis.MessageLevel.Info)
+        pass
+
+    def geocode_details(self):
+        QgsMessageLog.logMessage("Geokoduj (dane szczegółowe)", tag='AlgoMaps', level=Qgis.MessageLevel.Info)
+        pass

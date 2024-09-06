@@ -18,7 +18,7 @@
     <item row="0" column="0">
      <widget class="QTabWidget" name="tabWidget">
       <property name="currentIndex">
-       <number>1</number>
+       <number>0</number>
       </property>
       <widget class="QWidget" name="tab_single">
        <attribute name="title">
@@ -209,7 +209,7 @@
          </widget>
         </item>
         <item row="6" column="3" alignment="Qt::AlignRight">
-         <widget class="QPushButton" name="btn_standarize_details">
+         <widget class="QPushButton" name="btn_geocode_details">
           <property name="sizePolicy">
            <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
             <horstretch>0</horstretch>
@@ -288,7 +288,7 @@
          </widget>
         </item>
         <item row="0" column="3" alignment="Qt::AlignLeft">
-         <widget class="QPushButton" name="btn_standarize_general">
+         <widget class="QPushButton" name="btn_geocode_general">
           <property name="sizePolicy">
            <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
             <horstretch>0</horstretch>
@@ -314,7 +314,7 @@
          </widget>
         </item>
        </layout>
-       <zorder>btn_standarize_details</zorder>
+       <zorder>btn_geocode_details</zorder>
        <zorder>lbl_daneog</zorder>
        <zorder>txt_outputstand</zorder>
        <zorder>lbl_woj</zorder>
@@ -334,7 +334,7 @@
        <zorder>txt_flatno</zorder>
        <zorder>lbl_lokal</zorder>
        <zorder>txt_voivodeship</zorder>
-       <zorder>btn_standarize_general</zorder>
+       <zorder>btn_geocode_general</zorder>
        <zorder>lbl_lub</zorder>
       </widget>
       <widget class="QWidget" name="tab_settings">
@@ -500,6 +500,30 @@
    <header>qgspasswordlineedit.h</header>
   </customwidget>
  </customwidgets>
+ <tabstops>
+  <tabstop>tabWidget</tabstop>
+  <tabstop>txt_daneog</tabstop>
+  <tabstop>btn_geocode_general</tabstop>
+  <tabstop>txt_voivodeship</tabstop>
+  <tabstop>txt_county</tabstop>
+  <tabstop>txt_commune</tabstop>
+  <tabstop>txt_city</tabstop>
+  <tabstop>txt_postal</tabstop>
+  <tabstop>txt_street</tabstop>
+  <tabstop>txt_houseno</tabstop>
+  <tabstop>txt_flatno</tabstop>
+  <tabstop>btn_geocode_details</tabstop>
+  <tabstop>txt_outputstand</tabstop>
+  <tabstop>txt_dq_user</tabstop>
+  <tabstop>txt_dq_token</tabstop>
+  <tabstop>btn_settings_reset</tabstop>
+  <tabstop>txt_api_key</tabstop>
+  <tabstop>chk_teryt</tabstop>
+  <tabstop>chk_buildinfo</tabstop>
+  <tabstop>chk_gus</tabstop>
+  <tabstop>chk_risk</tabstop>
+  <tabstop>btn_settings_save</tabstop>
+ </tabstops>
  <resources/>
  <connections/>
 </ui>
