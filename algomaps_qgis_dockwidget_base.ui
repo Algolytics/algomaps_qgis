@@ -163,7 +163,7 @@
          <widget class="QTextBrowser" name="txt_outputstand"/>
         </item>
         <item row="0" column="1" colspan="2">
-         <widget class="QLineEdit" name="txt_daneog">
+         <widget class="QLineEdit" name="txt_generaldata">
           <property name="placeholderText">
            <string>Marszałkowska 1, Warszawa</string>
           </property>
@@ -318,7 +318,7 @@
        <zorder>lbl_daneog</zorder>
        <zorder>txt_outputstand</zorder>
        <zorder>lbl_woj</zorder>
-       <zorder>txt_daneog</zorder>
+       <zorder>txt_generaldata</zorder>
        <zorder>lbl_county</zorder>
        <zorder>txt_county</zorder>
        <zorder>txt_commune</zorder>
@@ -502,7 +502,7 @@
  </customwidgets>
  <tabstops>
   <tabstop>tabWidget</tabstop>
-  <tabstop>txt_daneog</tabstop>
+  <tabstop>txt_generaldata</tabstop>
   <tabstop>btn_geocode_general</tabstop>
   <tabstop>txt_voivodeship</tabstop>
   <tabstop>txt_county</tabstop>

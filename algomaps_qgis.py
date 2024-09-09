@@ -21,9 +21,12 @@
  *                                                                         *
  ***************************************************************************/
 """
+import requests
 from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication, Qt
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction
+from qgis._core import QgsRectangle, QgsPointXY, QgsCoordinateReferenceSystem, QgsCoordinateTransform, QgsField, \
+    QgsVectorLayer, QgsFeature, QgsGeometry
 
 from qgis.core import (
     Qgis,
@@ -55,6 +58,7 @@ class AlgoMapsPlugin:
         """
         # Save reference to the QGIS interface
         self.iface = iface
+        self.canvas = self.iface.mapCanvas()
 
         # Initialize plugin directory
         self.plugin_dir = os.path.dirname(__file__)
@@ -94,9 +98,6 @@ class AlgoMapsPlugin:
             self.dq_token = conf.get('dq_token')
             self.api_key = conf.get('api_key')
 
-            config_str = str([self.dq_user, self.dq_token, self.api_key])
-
-            QgsMessageLog.logMessage(config_str, tag='AlgoMaps', level=Qgis.MessageLevel.Info)
         except Exception as e:
             QgsMessageLog.logMessage('Cannot read config file', tag='AlgoMaps', level=Qgis.MessageLevel.Critical)
             QgsMessageLog.logMessage(repr(e), tag='AlgoMaps', level=Qgis.MessageLevel.Critical)
@@ -251,8 +252,8 @@ class AlgoMapsPlugin:
                 self.dockwidget.btn_settings_save.clicked.connect(self.save_settings)
                 self.dockwidget.btn_settings_reset.clicked.connect(self.reset_settings)
 
-                self.dockwidget.btn_geocode_general.clicked.connect(self.geocode_general)
-                self.dockwidget.btn_geocode_details.clicked.connect(self.geocode_details)
+                self.dockwidget.btn_geocode_general.clicked.connect(self.clicked_geocode_general)
+                self.dockwidget.btn_geocode_details.clicked.connect(self.clicked_geocode_details)
 
             # connect to provide cleanup on closing of dockwidget
             self.dockwidget.closingPlugin.connect(self.onClosePlugin)
@@ -306,10 +307,175 @@ class AlgoMapsPlugin:
         except:
             QgsMessageLog.logMessage("Zapis ustawień nie powiódł się", tag='AlgoMaps', level=Qgis.MessageLevel.Warning)
 
-    def geocode_general(self):
+    def clicked_geocode_general(self):
         QgsMessageLog.logMessage("Geokoduj (jedno pole adresowe)", tag='AlgoMaps', level=Qgis.MessageLevel.Info)
-        pass
+        dane_ogolne = self.dockwidget.txt_generaldata.text()
 
-    def geocode_details(self):
+        # API request
+        req_data = {
+            "generalData": dane_ogolne
+        }
+        result_json = self.send_single_algomaps_request(req_data)
+        if result_json is None:
+            return
+
+        self.dockwidget.txt_outputstand.setText(json.dumps(result_json, indent=2, ensure_ascii=False).encode('utf8').decode())
+
+        if 'latitude' in result_json and 'longitude' in result_json:
+            self.add_response_to_map(result_json, dane_ogolne)
+        else:
+            QgsMessageLog.logMessage('Brak geokodowania dla podanego adresu', 'AlgoMaps')
+
+    def clicked_geocode_details(self):
         QgsMessageLog.logMessage("Geokoduj (dane szczegółowe)", tag='AlgoMaps', level=Qgis.MessageLevel.Info)
-        pass
+        w = self.dockwidget.txt_voivodeship.text()
+        p = self.dockwidget.txt_county.text()
+        g = self.dockwidget.txt_commune.text()
+        m = self.dockwidget.txt_city.text()
+        k = self.dockwidget.txt_postal.text()
+        u = self.dockwidget.txt_street.text()
+        n = self.dockwidget.txt_houseno.text()
+        l = self.dockwidget.txt_flatno.text()
+
+        # API request
+        req_data = {
+            "voivodeshipName": w,
+            "countyName": p,
+            "communeName": g,
+            "cityName": m,
+            "postalCode": k,
+            "streetName": u,
+            "streetNumber": n,
+            "apartmentNumber": l
+        }
+
+        result_json = self.send_single_algomaps_request(req_data)
+        
+        if result_json is None:  # Error
+            return
+
+        self.dockwidget.txt_outputstand.setText(json.dumps(result_json, indent=2, ensure_ascii=False).encode('utf8').decode())
+
+        if 'latitude' in result_json and 'longitude' in result_json:
+            input_text = f'{w}|{p}|{g}|{m}|{k}|{u}|{n}|{l}'
+            self.add_response_to_map(result_json, input_text)
+        else:
+            QgsMessageLog.logMessage('Brak geokodowania dla podanego adresu', 'AlgoMaps')
+    
+    def send_single_algomaps_request(self, req_data, gus=False, teryt=False, buildings_info=False):
+        input_json = {
+            "inputRows": [req_data],
+            "processParameters": {
+                "activeModules": ["ADDRESSES"],
+                "includeBuildingsInfo": buildings_info,
+                "includeSymbolicNames": teryt,
+                "includeDiagnosticInfo": True,
+                "includeGeographicCoordinates": True,
+                "includeGusZones": gus
+            }
+        }
+
+        headers = {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-cache',
+            'Ocp-Apim-Subscription-Key': self.api_key
+        }
+
+        response = requests.post('https://api.algolytics.pl/dqo/api/v1/rows',
+                                 json=input_json,
+                                 headers=headers)
+        if response.status_code == 200:
+            return response.json()[0]
+        else:
+            QgsMessageLog.logMessage('Could not fetch the data from server, check the settings',
+                                     tag = 'AlgoMaps',
+                                     level=Qgis.MessageLevel.Critical)
+            return None
+
+    def add_response_to_map(self, result_json, input_data=None):
+        lat = result_json.get('latitude')
+        lon = result_json.get('longitude')
+        voivodeship = result_json.get('voivodeshipName')
+        county = result_json.get('countyName')
+        commune = result_json.get('communeName')
+        postal_code = result_json.get('postalCode')
+        city_name = result_json.get('cityName')
+        street_attr = result_json.get('streetAttribute')
+        street_name = result_json.get('streetName')
+        street_number = result_json.get('streetNumber')
+        apart_number = result_json.get('apartmentNumber')
+        status = result_json.get('statuses')
+
+        import re
+        status_groups = re.findall(r'(<.*>).*(<.*>)', status)[0]
+        stat1, stat2 = None, None
+        if len(status_groups) == 2:
+            stat1 = status_groups[0]
+            stat2 = status_groups[1]
+
+        #
+        layer_name = "AlgoMaps standaryzacja i geokodowanie"
+        layer_find = QgsProject.instance().mapLayersByName(layer_name)
+        if len(layer_find) == 0:
+            # Create layer if not exists
+            vl = QgsVectorLayer("Point?crs=epsg:4326", layer_name, "memory")
+            self.qproj.addMapLayer(vl)
+
+            pr = vl.dataProvider()
+            if Qgis.versionInt() > 33800:
+                from qgis.PyQt.QtCore import QMetaType
+                field_string_type = QMetaType.QString
+            else:
+                from qgis.PyQt.QtCore import QVariant
+                field_string_type = QVariant.String
+
+            # TODO: różne pola dla różnych checkboxów
+            pr.addAttributes([QgsField("inputData", field_string_type),
+                              QgsField("voivodeshipName", field_string_type),
+                              QgsField("countyName", field_string_type),
+                              QgsField("communeName", field_string_type),
+                              QgsField("postalCode", field_string_type),
+                              QgsField("cityName", field_string_type),
+                              QgsField("streetAttribute", field_string_type),
+                              QgsField("streetName", field_string_type),
+                              QgsField("streetNumber", field_string_type),
+                              QgsField("apartmentNumber", field_string_type),
+                              QgsField("status1", field_string_type),
+                              QgsField("status2", field_string_type)])
+        else:
+            vl = layer_find[0]
+            pr = vl.dataProvider()
+
+        # Create feature
+        f = QgsFeature()
+        f.setGeometry(QgsGeometry.fromPointXY(QgsPointXY(lon, lat)))
+        f.setAttributes([input_data,
+                         voivodeship,
+                         county,
+                         commune,
+                         postal_code,
+                         city_name,
+                         street_attr,
+                         street_name,
+                         street_number,
+                         apart_number,
+                         stat1,
+                         stat2])
+        pr.addFeature(f)
+        vl.updateFields()
+        vl.updateExtents()
+
+        # Recenter the map
+        self.recenter_at_xy(lon, lat)
+
+    def recenter_at_xy(self, lon, lat, srs=4326):
+        original_rect = QgsRectangle(QgsPointXY(lon, lat), QgsPointXY(lon, lat))
+        source_crs = QgsCoordinateReferenceSystem(f"EPSG:{srs}")
+        dest_crs = self.qproj.crs()
+
+        transform_context = QgsProject.instance().transformContext()
+        coordinate_transform = QgsCoordinateTransform(source_crs, dest_crs, transform_context)
+        transformed_rect = coordinate_transform.transformBoundingBox(original_rect)
+
+        self.canvas.setExtent(transformed_rect)
+        self.canvas.refresh()
