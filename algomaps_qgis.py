@@ -122,7 +122,9 @@ class AlgoMapsPlugin:
             self.default_chk_financial = conf.get("default_chk_financial")
 
         except Exception as e:
-            QgsMessageLog.logMessage('Cannot read config file', tag='AlgoMaps', level=Qgis.MessageLevel.Critical)
+            iface.messageBar().pushMessage(self.tr(u'AlgoMaps Error'),
+                                           self.tr(u'Cannot read config file, check details in "Log Messages" tab.'),
+                                           level=Qgis.MessageLevel.Critical)
             QgsMessageLog.logMessage(repr(e), tag='AlgoMaps', level=Qgis.MessageLevel.Critical)
 
     # noinspection PyMethodMayBeStatic
@@ -312,7 +314,8 @@ class AlgoMapsPlugin:
         # Set default checkbox values
         self.populate_checkbox_settings_ui()
 
-        QgsMessageLog.logMessage("Reset ustawień.", tag='AlgoMaps', level=Qgis.MessageLevel.Info)
+        if DEBUG_MODE:
+            QgsMessageLog.logMessage("Reset ustawień.", tag='AlgoMaps', level=Qgis.MessageLevel.Info)
 
     def save_settings(self):
         try:
@@ -340,13 +343,16 @@ class AlgoMapsPlugin:
             self.default_chk_buildinfo = new_settings["default_chk_buildinfo"]
             self.default_chk_financial = new_settings["default_chk_financial"]
 
-            QgsMessageLog.logMessage("Zapisano ustawienia", tag='AlgoMaps', level=Qgis.MessageLevel.Success)
+            if DEBUG_MODE:
+                QgsMessageLog.logMessage("Zapisano ustawienia", tag='AlgoMaps', level=Qgis.MessageLevel.Success)
 
         except:
-            QgsMessageLog.logMessage("Zapis ustawień nie powiódł się", tag='AlgoMaps', level=Qgis.MessageLevel.Warning)
+                QgsMessageLog.logMessage("Zapis ustawień nie powiódł się", tag='AlgoMaps', level=Qgis.MessageLevel.Warning)
 
     def clicked_geocode_general(self):
-        QgsMessageLog.logMessage("Geokoduj (jedno pole adresowe)", tag='AlgoMaps', level=Qgis.MessageLevel.Info)
+        if DEBUG_MODE:
+            QgsMessageLog.logMessage("Geokoduj (jedno pole adresowe)", tag='AlgoMaps', level=Qgis.MessageLevel.Info)
+
         dane_ogolne = self.dockwidget.txt_generaldata.text()
 
         # API request
@@ -367,10 +373,14 @@ class AlgoMapsPlugin:
             self.add_response_to_map(result_json, dane_ogolne, self.include_teryt,
                                      self.include_gus, self.include_buildinfo, self.include_financial)
         else:
-            QgsMessageLog.logMessage('Brak geokodowania dla podanego adresu', 'AlgoMaps')
+            QgsMessageLog.logMessage('Brak geokodowania dla podanego adresu',
+                                     tag='AlgoMaps',
+                                     level=Qgis.MessageLevel.Warning)
 
     def clicked_geocode_details(self):
-        QgsMessageLog.logMessage("Geokoduj (dane szczegółowe)", tag='AlgoMaps', level=Qgis.MessageLevel.Info)
+        if DEBUG_MODE:
+            QgsMessageLog.logMessage("Geokoduj (dane szczegółowe)", tag='AlgoMaps', level=Qgis.MessageLevel.Info)
+
         w = self.dockwidget.txt_voivodeship.text()
         p = self.dockwidget.txt_county.text()
         g = self.dockwidget.txt_commune.text()
@@ -408,7 +418,9 @@ class AlgoMapsPlugin:
             self.add_response_to_map(result_json, input_text, self.include_teryt,
                                      self.include_gus, self.include_buildinfo, self.include_financial)
         else:
-            QgsMessageLog.logMessage('Brak geokodowania dla podanego adresu', 'AlgoMaps')
+            QgsMessageLog.logMessage('Brak geokodowania dla podanego adresu',
+                                     tag='AlgoMaps',
+                                     level=Qgis.MessageLevel.Warning)
     
     def send_single_algomaps_request(self, req_data, teryt=False, gus=False, buildinfo=False, financial=False):
         active_modules = ["ADDRESSES"] if not financial else ["ADDRESSES", "FINANCES"]
@@ -424,7 +436,8 @@ class AlgoMapsPlugin:
                 "includeGusZones": gus
             }
         }
-        QgsMessageLog.logMessage(repr(input_json), tag='AlgoMaps')
+        if DEBUG_MODE:
+            QgsMessageLog.logMessage('SEND: ' + repr(input_json), tag='AlgoMaps', level=Qgis.MessageLevel.Info)
 
         headers = {
             'Content-Type': 'application/json',
@@ -438,9 +451,9 @@ class AlgoMapsPlugin:
         if response.status_code == 200:
             return response.json()[0]
         else:
-            QgsMessageLog.logMessage('Could not fetch the data from server, check the settings',
-                                     tag = 'AlgoMaps',
-                                     level=Qgis.MessageLevel.Critical)
+            self.iface.messageBar().pushMessage(self.tr(u'AlgoMaps Error'),
+                                                self.tr(u'Could not fetch the data from server, check the settings'),
+                                                level=Qgis.MessageLevel.Critical)
             return None
 
     def add_response_to_map(self, result_json, input_data=None, teryt=False, gus=False, buildinfo=False, financial=False):
@@ -465,13 +478,7 @@ class AlgoMapsPlugin:
         lon = result_json.get('longitude')
         status = result_json.get('statuses')
 
-        # Split status into two separate strings TODO: can be more than 2
-        import re
-        status_groups = re.findall(r'(<.*>).*(<.*>)', status)[0]
-        stat1, stat2 = None, None
-        if len(status_groups) == 2:
-            stat1 = status_groups[0]
-            stat2 = status_groups[1]
+        status_match, status_geocode, status_other = self._parse_statuses(status)
 
         default_definitions = [QgsField(x[0], x[1]) for x in default_fields]
         default_values = [x[2] for x in default_fields]  # Values of fields in order
@@ -543,8 +550,9 @@ class AlgoMapsPlugin:
 
             pr.addAttributes([QgsField("inputData", self._field_string_type),
                               *default_definitions,
-                              QgsField("status1", self._field_string_type),
-                              QgsField("status2", self._field_string_type),
+                              QgsField("statusMatch", self._field_string_type),
+                              QgsField("statusGeocoding", self._field_string_type),
+                              QgsField("statusOther", self._field_string_type),
                               *additional_definitions])
         else:
             vl = layer_find[0]
@@ -555,8 +563,9 @@ class AlgoMapsPlugin:
         f.setGeometry(QgsGeometry.fromPointXY(QgsPointXY(lon, lat)))
         f.setAttributes([input_data,
                          *default_values,
-                         stat1,
-                         stat2,
+                         status_match,
+                         status_geocode,
+                         status_other,
                          *additional_values])
         pr.addFeature(f)
         vl.updateFields()
@@ -607,5 +616,29 @@ class AlgoMapsPlugin:
             QgsMessageLog().logMessage('Checkbox state: [TERYT, GUS, BUILDINFO, FINANCIAL]', 'AlgoMaps',
                                        level=Qgis.MessageLevel.Info)
             QgsMessageLog().logMessage(include_txt, 'AlgoMaps', level=Qgis.MessageLevel.Info)
+
+    def _parse_statuses(self, status):
+
+        # Split status into three separate strings (match, geocode, others)
+        import re
+        matches = re.findall(r'(<dopasowanie: [^>]+>)|(<geokodowanie: [^>]+>)|(<[^>]+>)',
+                             status.strip())
+
+        status_dop = None
+        status_geo = None
+        status_other = []
+
+        for match in matches:
+            if match[0]:
+                status_dop = match[0]
+            elif match[1]:
+                status_geo = match[1]
+            elif match[2]:
+                status_other.append(match[2])
+
+        # Concatenate all "other" matches into a single string
+        status_other = ''.join(status_other) if status_other else None
+
+        return status_dop, status_geo, status_other
 
 
