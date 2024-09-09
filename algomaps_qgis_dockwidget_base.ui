@@ -18,7 +18,7 @@
     <item row="0" column="0">
      <widget class="QTabWidget" name="tabWidget">
       <property name="currentIndex">
-       <number>0</number>
+       <number>1</number>
       </property>
       <widget class="QWidget" name="tab_single">
        <attribute name="title">
@@ -422,7 +422,7 @@
               <string>Identyfikatory TERYT</string>
              </property>
              <property name="checkable">
-              <bool>false</bool>
+              <bool>true</bool>
              </property>
             </widget>
            </item>
@@ -432,17 +432,17 @@
               <string>Informacje o budynku</string>
              </property>
              <property name="checkable">
-              <bool>false</bool>
+              <bool>true</bool>
              </property>
             </widget>
            </item>
            <item row="3" column="0">
             <widget class="QCheckBox" name="chk_gus">
              <property name="text">
-              <string>Obwody i demografia GUS</string>
+              <string>Obwody GUS</string>
              </property>
              <property name="checkable">
-              <bool>false</bool>
+              <bool>true</bool>
              </property>
             </widget>
            </item>
@@ -454,11 +454,17 @@
             </widget>
            </item>
            <item row="5" column="0">
-            <widget class="QCheckBox" name="chk_risk">
+            <widget class="QCheckBox" name="chk_financial">
+             <property name="enabled">
+              <bool>true</bool>
+             </property>
              <property name="text">
-              <string>Ryzyko finansowe</string>
+              <string>Dane finansowe (ryzyko i dochody)</string>
              </property>
              <property name="checkable">
+              <bool>true</bool>
+             </property>
+             <property name="checked">
               <bool>false</bool>
              </property>
             </widget>
@@ -521,7 +527,7 @@
   <tabstop>chk_teryt</tabstop>
   <tabstop>chk_buildinfo</tabstop>
   <tabstop>chk_gus</tabstop>
-  <tabstop>chk_risk</tabstop>
+  <tabstop>chk_financial</tabstop>
   <tabstop>btn_settings_save</tabstop>
  </tabstops>
  <resources/>

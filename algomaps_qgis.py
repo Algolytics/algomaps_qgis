@@ -25,13 +25,14 @@ import requests
 from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication, Qt
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction
-from qgis._core import QgsRectangle, QgsPointXY, QgsCoordinateReferenceSystem, QgsCoordinateTransform, QgsField, \
-    QgsVectorLayer, QgsFeature, QgsGeometry
 
 from qgis.core import (
     Qgis,
     QgsMessageLog,
     QgsProject,
+    QgsRectangle, QgsPointXY, QgsCoordinateReferenceSystem, QgsCoordinateTransform,
+    QgsField, QgsFeature, QgsVectorLayer,
+    QgsGeometry
 )
 
 # Initialize Qt resources from file resources.py
@@ -44,6 +45,8 @@ import os.path
 import json
 
 CONFIG_PATH = 'dq_config.json'
+DEBUG_MODE = True  # Verbose messages
+
 
 class AlgoMapsPlugin:
     """QGIS Plugin Implementation."""
@@ -57,6 +60,10 @@ class AlgoMapsPlugin:
         :type iface: QgsInterface
         """
         # Save reference to the QGIS interface
+        self.include_gus = None
+        self.include_teryt = None
+        self.include_buildinfo = None
+        self.include_financial = None
         self.iface = iface
         self.canvas = self.iface.mapCanvas()
 
@@ -88,15 +95,31 @@ class AlgoMapsPlugin:
         self.dockwidget = None
         self.qproj = None
 
+        if Qgis.versionInt() > 33800:
+            from qgis.PyQt.QtCore import QMetaType
+            self._field_string_type = QMetaType.QString
+            self._field_int_type = QMetaType.Int
+            self._field_double_type = QMetaType.Double
+        else:
+            from qgis.PyQt.QtCore import QVariant
+            self._field_string_type = QVariant.String
+            self._field_int_type = QVariant.Int
+            self._field_double_type = QVariant.Double
+
         # Read config file
         try:
 
             with open(self.config_path) as f:
                 conf = json.load(f)
 
-            self.dq_user = conf.get('dq_user')
-            self.dq_token = conf.get('dq_token')
-            self.api_key = conf.get('api_key')
+            self.dq_user = conf.get("dq_user")
+            self.dq_token = conf.get("dq_token")
+            self.api_key = conf.get("api_key")
+
+            self.default_chk_teryt = conf.get("default_chk_teryt")
+            self.default_chk_gus = conf.get("default_chk_gus")
+            self.default_chk_buildinfo = conf.get("default_chk_buildinfo")
+            self.default_chk_financial = conf.get("default_chk_financial")
 
         except Exception as e:
             QgsMessageLog.logMessage('Cannot read config file', tag='AlgoMaps', level=Qgis.MessageLevel.Critical)
@@ -200,14 +223,11 @@ class AlgoMapsPlugin:
             text=self.tr(u'AlgoMaps - standaryzacja i geokodowanie adresów'),
             callback=self.run,
             parent=self.iface.mainWindow())
-        # # will be set False in run()
-        # self.first_start = True
+
         self.qproj = QgsProject.instance()
 
     def onClosePlugin(self):
         """Cleanup necessary items here when plugin dockwidget is closed"""
-
-        #print "** CLOSING AlgoMapsPlugin"
 
         # disconnects
         self.dockwidget.closingPlugin.disconnect(self.onClosePlugin)
@@ -248,12 +268,21 @@ class AlgoMapsPlugin:
                 # Fill the `config.json` values into UI
                 self.populate_dq_api_settings_ui()
 
+                # Set default checkboxes values
+                self.populate_checkbox_settings_ui()
+
                 # Connect the buttons
                 self.dockwidget.btn_settings_save.clicked.connect(self.save_settings)
                 self.dockwidget.btn_settings_reset.clicked.connect(self.reset_settings)
 
                 self.dockwidget.btn_geocode_general.clicked.connect(self.clicked_geocode_general)
                 self.dockwidget.btn_geocode_details.clicked.connect(self.clicked_geocode_details)
+                
+                # Conenct settings checkboxes
+                self.dockwidget.chk_teryt.stateChanged.connect(self.settings_chkbox_changed)
+                self.dockwidget.chk_gus.stateChanged.connect(self.settings_chkbox_changed)
+                self.dockwidget.chk_buildinfo.stateChanged.connect(self.settings_chkbox_changed)
+                self.dockwidget.chk_financial.stateChanged.connect(self.settings_chkbox_changed)
 
             # connect to provide cleanup on closing of dockwidget
             self.dockwidget.closingPlugin.connect(self.onClosePlugin)
@@ -263,33 +292,40 @@ class AlgoMapsPlugin:
             self.iface.addDockWidget(Qt.RightDockWidgetArea, self.dockwidget)
             self.dockwidget.show()
 
-
-
     def populate_dq_api_settings_ui(self):
         self.dockwidget.txt_dq_user.setText(self.dq_user)
         self.dockwidget.txt_dq_token.setText(self.dq_token)
         self.dockwidget.txt_api_key.setText(self.api_key)
 
     def populate_checkbox_settings_ui(self):
-        #TODO
-        pass
+        self.dockwidget.chk_financial.setChecked(self.default_chk_financial)
+        self.dockwidget.chk_teryt.setChecked(self.default_chk_teryt)
+        self.dockwidget.chk_gus.setChecked(self.default_chk_gus)
+        self.dockwidget.chk_buildinfo.setChecked(self.default_chk_buildinfo)
+        if self.dockwidget.chk_financial.isChecked():
+            self.dockwidget.chk_gus.setEnabled(False)
 
     def reset_settings(self):
         # Set previous DQ/API data
         self.populate_dq_api_settings_ui()
 
         # Set default checkbox values
-        self.populate_checkbox_settings_ui()  # TODO
+        self.populate_checkbox_settings_ui()
 
         QgsMessageLog.logMessage("Reset ustawień.", tag='AlgoMaps', level=Qgis.MessageLevel.Info)
 
     def save_settings(self):
         try:
-            # Save new DQ/API data
             new_settings = {
+                # Save new DQ/API data
                 "dq_user": self.dockwidget.txt_dq_user.text(),
                 "dq_token": self.dockwidget.txt_dq_token.text(),
                 "api_key": self.dockwidget.txt_api_key.text(),
+                # Save the checkbox values
+                "default_chk_teryt": self.dockwidget.chk_teryt.isChecked(),
+                "default_chk_gus": self.dockwidget.chk_gus.isChecked(),
+                "default_chk_buildinfo": self.dockwidget.chk_buildinfo.isChecked(),
+                "default_chk_financial": self.dockwidget.chk_financial.isChecked(),
             }
 
             with open(self.config_path, 'w') as f:
@@ -299,8 +335,10 @@ class AlgoMapsPlugin:
             self.dq_token = new_settings['dq_token']
             self.api_key = new_settings['api_key']
 
-            # Save the checkbox values
-            # TODO
+            self.default_chk_teryt = new_settings["default_chk_teryt"]
+            self.default_chk_gus = new_settings["default_chk_gus"]
+            self.default_chk_buildinfo = new_settings["default_chk_buildinfo"]
+            self.default_chk_financial = new_settings["default_chk_financial"]
 
             QgsMessageLog.logMessage("Zapisano ustawienia", tag='AlgoMaps', level=Qgis.MessageLevel.Success)
 
@@ -315,14 +353,19 @@ class AlgoMapsPlugin:
         req_data = {
             "generalData": dane_ogolne
         }
-        result_json = self.send_single_algomaps_request(req_data)
+        result_json = self.send_single_algomaps_request(req_data,
+                                                        self.include_teryt,
+                                                        self.include_gus,
+                                                        self.include_buildinfo,
+                                                        self.include_financial)
         if result_json is None:
             return
 
         self.dockwidget.txt_outputstand.setText(json.dumps(result_json, indent=2, ensure_ascii=False).encode('utf8').decode())
 
         if 'latitude' in result_json and 'longitude' in result_json:
-            self.add_response_to_map(result_json, dane_ogolne)
+            self.add_response_to_map(result_json, dane_ogolne, self.include_teryt,
+                                     self.include_gus, self.include_buildinfo, self.include_financial)
         else:
             QgsMessageLog.logMessage('Brak geokodowania dla podanego adresu', 'AlgoMaps')
 
@@ -349,7 +392,11 @@ class AlgoMapsPlugin:
             "apartmentNumber": l
         }
 
-        result_json = self.send_single_algomaps_request(req_data)
+        result_json = self.send_single_algomaps_request(req_data,
+                                                        self.include_teryt,
+                                                        self.include_gus,
+                                                        self.include_buildinfo,
+                                                        self.include_financial)
         
         if result_json is None:  # Error
             return
@@ -358,22 +405,26 @@ class AlgoMapsPlugin:
 
         if 'latitude' in result_json and 'longitude' in result_json:
             input_text = f'{w}|{p}|{g}|{m}|{k}|{u}|{n}|{l}'
-            self.add_response_to_map(result_json, input_text)
+            self.add_response_to_map(result_json, input_text, self.include_teryt,
+                                     self.include_gus, self.include_buildinfo, self.include_financial)
         else:
             QgsMessageLog.logMessage('Brak geokodowania dla podanego adresu', 'AlgoMaps')
     
-    def send_single_algomaps_request(self, req_data, gus=False, teryt=False, buildings_info=False):
+    def send_single_algomaps_request(self, req_data, teryt=False, gus=False, buildinfo=False, financial=False):
+        active_modules = ["ADDRESSES"] if not financial else ["ADDRESSES", "FINANCES"]
+        gus = gus if not financial else True  # If using financial data, we need GUS identifiers
         input_json = {
             "inputRows": [req_data],
             "processParameters": {
-                "activeModules": ["ADDRESSES"],
-                "includeBuildingsInfo": buildings_info,
+                "activeModules": active_modules,
+                "includeBuildingsInfo": buildinfo,
                 "includeSymbolicNames": teryt,
                 "includeDiagnosticInfo": True,
                 "includeGeographicCoordinates": True,
                 "includeGusZones": gus
             }
         }
+        QgsMessageLog.logMessage(repr(input_json), tag='AlgoMaps')
 
         headers = {
             'Content-Type': 'application/json',
@@ -392,20 +443,29 @@ class AlgoMapsPlugin:
                                      level=Qgis.MessageLevel.Critical)
             return None
 
-    def add_response_to_map(self, result_json, input_data=None):
+    def add_response_to_map(self, result_json, input_data=None, teryt=False, gus=False, buildinfo=False, financial=False):
+        default_fields_names = ["voivodeshipName", "countyName", "communeName", "postalCode",
+                                "cityName", "cityDistrictName", "streetAttribute", "streetName",
+                                "streetNameMajorPart", "streetNameMinorPart", "streetNumber", "apartmentNumber",
+                                "addressId", "numberOfApartments", "numberOfJuridicalPersons",
+                                "latitude", "longitude"]
+
+        default_fields = []
+
+        for field in default_fields_names:
+            if field in ["latitude", "longitude"]:
+                field_type = self._field_double_type
+            elif field in ["numberOfApartments", "numberOfJuridicalPersons"]:
+                field_type = self._field_int_type
+            else:
+                field_type = self._field_string_type
+            default_fields.append(self._define_field(field, field_type, result_json))
+
         lat = result_json.get('latitude')
         lon = result_json.get('longitude')
-        voivodeship = result_json.get('voivodeshipName')
-        county = result_json.get('countyName')
-        commune = result_json.get('communeName')
-        postal_code = result_json.get('postalCode')
-        city_name = result_json.get('cityName')
-        street_attr = result_json.get('streetAttribute')
-        street_name = result_json.get('streetName')
-        street_number = result_json.get('streetNumber')
-        apart_number = result_json.get('apartmentNumber')
         status = result_json.get('statuses')
 
+        # Split status into two separate strings TODO: can be more than 2
         import re
         status_groups = re.findall(r'(<.*>).*(<.*>)', status)[0]
         stat1, stat2 = None, None
@@ -413,7 +473,65 @@ class AlgoMapsPlugin:
             stat1 = status_groups[0]
             stat2 = status_groups[1]
 
-        #
+        default_definitions = [QgsField(x[0], x[1]) for x in default_fields]
+        default_values = [x[2] for x in default_fields]  # Values of fields in order
+
+        # Additional fields (checkboxes selected)
+        additional_fields = []
+
+        if teryt:
+            additional_fields.append(self._define_field("communeSymbol", self._field_string_type, result_json))
+            additional_fields.append(self._define_field("communeTypeSymbol", self._field_int_type, result_json))
+            additional_fields.append(self._define_field("communeTypeName", self._field_string_type, result_json))
+            additional_fields.append(self._define_field("citySymbol", self._field_string_type, result_json))
+            additional_fields.append(self._define_field("cityDistrictSymbol", self._field_string_type, result_json))
+            additional_fields.append(self._define_field("streetSymbol", self._field_string_type, result_json))
+
+        if gus:
+            additional_fields.append(self._define_field("statisticalRegionSymbol", self._field_string_type, result_json))
+            additional_fields.append(self._define_field("censusCircuitSymbol", self._field_string_type, result_json))
+
+        if buildinfo:
+            # Integer fields
+            for field in ["numberOfInhabitedApartmentsByGUS", "numberOfInhabitedApartmentsByPESEL",
+                          "numberOfInhabitantsByGUS", "numberOfInhabitantsByPESEL",
+                          "numberOfMen",
+                          "numberOfMenBetween_0_4_yearsOld", "numberOfMenBetween_5_9_yearsOld",
+                          "numberOfMenBetween_10_14_yearsOld", "numberOfMenBetween_15_19_yearsOld",
+                          "numberOfMenBetween_20_24_yearsOld", "numberOfMenBetween_25_29_yearsOld",
+                          "numberOfMenBetween_30_34_yearsOld", "numberOfMenBetween_35_39_yearsOld",
+                          "numberOfMenBetween_40_44_yearsOld", "numberOfMenBetween_45_49_yearsOld",
+                          "numberOfMenBetween_50_54_yearsOld", "numberOfMenBetween_55_59_yearsOld",
+                          "numberOfMenBetween_60_64_yearsOld", "numberOfMenOver_65_yearsOld",
+                          "numberOfWomen",
+                          "numberOfWomenBetween_0_4_yearsOld", "numberOfWomenBetween_5_9_yearsOld",
+                          "numberOfWomenBetween_10_14_yearsOld", "numberOfWomenBetween_15_19_yearsOld",
+                          "numberOfWomenBetween_20_24_yearsOld", "numberOfWomenBetween_25_29_yearsOld",
+                          "numberOfWomenBetween_30_34_yearsOld", "numberOfWomenBetween_35_39_yearsOld",
+                          "numberOfWomenBetween_40_44_yearsOld", "numberOfWomenBetween_45_49_yearsOld",
+                          "numberOfWomenBetween_50_54_yearsOld", "numberOfWomenBetween_55_59_yearsOld",
+                          "numberOfWomenBetween_60_64_yearsOld", "numberOfWomenOver_65_yearsOld",
+                          "numberOfMicroEntrepreneurs"]:
+                additional_fields.append(self._define_field(field, self._field_int_type, result_json))
+            # String field
+            additional_fields.append(self._define_field("taxationAuthority", self._field_string_type, result_json))
+
+        if financial:
+            # Double precision fields
+            for field in ["individualClientFraudStatistic", "individualClientFraudScore",
+                          "individualClientDefaultStatistic", "individualClientDefaultScore",
+                          "businessClientFraudStatistic", "businessClientFraudScore",
+                          "businessClientDefaultStatistic", "businessClientDefaultScore",
+                          "entrepreneurFraudStatistic", "entrepreneurFraudScore",
+                          "entrepreneurDefaultStatistic", "entrepreneurDefaultScore",
+                          "averageIncome", "incomePercentile5", "incomePercentile25", "incomePercentile50",
+                          "incomePercentile75", "incomePercentile95"]:
+                additional_fields.append(self._define_field(field, self._field_double_type, result_json))
+
+        additional_values = [x[2] for x in additional_fields]  # Values of additional fields in order
+        additional_definitions = [QgsField(x[0], x[1]) for x in additional_fields]  # Field definitions for data provider
+
+        # Add to map
         layer_name = "AlgoMaps standaryzacja i geokodowanie"
         layer_find = QgsProject.instance().mapLayersByName(layer_name)
         if len(layer_find) == 0:
@@ -422,26 +540,12 @@ class AlgoMapsPlugin:
             self.qproj.addMapLayer(vl)
 
             pr = vl.dataProvider()
-            if Qgis.versionInt() > 33800:
-                from qgis.PyQt.QtCore import QMetaType
-                field_string_type = QMetaType.QString
-            else:
-                from qgis.PyQt.QtCore import QVariant
-                field_string_type = QVariant.String
 
-            # TODO: różne pola dla różnych checkboxów
-            pr.addAttributes([QgsField("inputData", field_string_type),
-                              QgsField("voivodeshipName", field_string_type),
-                              QgsField("countyName", field_string_type),
-                              QgsField("communeName", field_string_type),
-                              QgsField("postalCode", field_string_type),
-                              QgsField("cityName", field_string_type),
-                              QgsField("streetAttribute", field_string_type),
-                              QgsField("streetName", field_string_type),
-                              QgsField("streetNumber", field_string_type),
-                              QgsField("apartmentNumber", field_string_type),
-                              QgsField("status1", field_string_type),
-                              QgsField("status2", field_string_type)])
+            pr.addAttributes([QgsField("inputData", self._field_string_type),
+                              *default_definitions,
+                              QgsField("status1", self._field_string_type),
+                              QgsField("status2", self._field_string_type),
+                              *additional_definitions])
         else:
             vl = layer_find[0]
             pr = vl.dataProvider()
@@ -450,17 +554,10 @@ class AlgoMapsPlugin:
         f = QgsFeature()
         f.setGeometry(QgsGeometry.fromPointXY(QgsPointXY(lon, lat)))
         f.setAttributes([input_data,
-                         voivodeship,
-                         county,
-                         commune,
-                         postal_code,
-                         city_name,
-                         street_attr,
-                         street_name,
-                         street_number,
-                         apart_number,
+                         *default_values,
                          stat1,
-                         stat2])
+                         stat2,
+                         *additional_values])
         pr.addFeature(f)
         vl.updateFields()
         vl.updateExtents()
@@ -468,8 +565,19 @@ class AlgoMapsPlugin:
         # Recenter the map
         self.recenter_at_xy(lon, lat)
 
+    def _define_field(self, field_name, field_type, result_json):
+        if field_type == 'str' or field_type == 'string':
+            field_type = self._field_string_type
+        if field_type == 'int':
+            field_type = self._field_int_type
+        if field_type == 'double' or field_type == 'float':
+            field_type = self._field_double_type
+        return [field_name, field_type, result_json.get(field_name)]
+
     def recenter_at_xy(self, lon, lat, srs=4326):
         original_rect = QgsRectangle(QgsPointXY(lon, lat), QgsPointXY(lon, lat))
+
+        # We need to transform the point lat/lon to map's CRS
         source_crs = QgsCoordinateReferenceSystem(f"EPSG:{srs}")
         dest_crs = self.qproj.crs()
 
@@ -477,5 +585,27 @@ class AlgoMapsPlugin:
         coordinate_transform = QgsCoordinateTransform(source_crs, dest_crs, transform_context)
         transformed_rect = coordinate_transform.transformBoundingBox(original_rect)
 
+        # Center map at the point
         self.canvas.setExtent(transformed_rect)
         self.canvas.refresh()
+        
+    def settings_chkbox_changed(self, i):
+        self.include_teryt = True if self.dockwidget.chk_teryt.isChecked() else False
+        self.include_gus = True if self.dockwidget.chk_gus.isChecked() else False
+        self.include_buildinfo = True if self.dockwidget.chk_buildinfo.isChecked() else False
+        if self.dockwidget.chk_financial.isChecked():
+            self.include_financial = True
+            self.include_gus = True
+            self.dockwidget.chk_gus.setChecked(True)
+            self.dockwidget.chk_gus.setEnabled(False)
+        else:
+            self.dockwidget.chk_gus.setEnabled(True)
+            self.include_financial = False
+
+        if DEBUG_MODE:
+            include_txt = str([self.include_teryt, self.include_gus, self.include_buildinfo, self.include_financial])
+            QgsMessageLog().logMessage('Checkbox state: [TERYT, GUS, BUILDINFO, FINANCIAL]', 'AlgoMaps',
+                                       level=Qgis.MessageLevel.Info)
+            QgsMessageLog().logMessage(include_txt, 'AlgoMaps', level=Qgis.MessageLevel.Info)
+
+
