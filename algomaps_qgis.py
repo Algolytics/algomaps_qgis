@@ -122,7 +122,7 @@ class AlgoMapsPlugin:
             self.default_chk_financial = conf.get("default_chk_financial")
 
         except Exception as e:
-            iface.messageBar().pushMessage(self.tr(u'AlgoMaps Error'),
+            iface.messageBar().pushMessage(self.tr(u'AlgoMaps'),
                                            self.tr(u'Cannot read config file, check details in "Log Messages" tab.'),
                                            level=Qgis.MessageLevel.Critical)
             QgsMessageLog.logMessage(repr(e), tag='AlgoMaps', level=Qgis.MessageLevel.Critical)
@@ -347,7 +347,9 @@ class AlgoMapsPlugin:
                 QgsMessageLog.logMessage("Zapisano ustawienia", tag='AlgoMaps', level=Qgis.MessageLevel.Success)
 
         except:
-                QgsMessageLog.logMessage("Zapis ustawień nie powiódł się", tag='AlgoMaps', level=Qgis.MessageLevel.Warning)
+            self.iface.messageBar().pushMessage(self.tr(u'AlgoMaps'),
+                                                self.tr(u'Zapis ustawień nie powiódł się'),
+                                                level=Qgis.MessageLevel.Warning)
 
     def clicked_geocode_general(self):
         if DEBUG_MODE:
@@ -373,9 +375,9 @@ class AlgoMapsPlugin:
             self.add_response_to_map(result_json, dane_ogolne, self.include_teryt,
                                      self.include_gus, self.include_buildinfo, self.include_financial)
         else:
-            QgsMessageLog.logMessage('Brak geokodowania dla podanego adresu',
-                                     tag='AlgoMaps',
-                                     level=Qgis.MessageLevel.Warning)
+            self.iface.messageBar().pushMessage(self.tr(u'AlgoMaps'),
+                                                self.tr(u'Brak geokodowania dla podanego adresu'),
+                                                level=Qgis.MessageLevel.Warning)
 
     def clicked_geocode_details(self):
         if DEBUG_MODE:
@@ -418,9 +420,9 @@ class AlgoMapsPlugin:
             self.add_response_to_map(result_json, input_text, self.include_teryt,
                                      self.include_gus, self.include_buildinfo, self.include_financial)
         else:
-            QgsMessageLog.logMessage('Brak geokodowania dla podanego adresu',
-                                     tag='AlgoMaps',
-                                     level=Qgis.MessageLevel.Warning)
+            self.iface.messageBar().pushMessage(self.tr(u'AlgoMaps'),
+                                                self.tr(u'Brak geokodowania dla podanego adresu'),
+                                                level=Qgis.MessageLevel.Warning)
     
     def send_single_algomaps_request(self, req_data, teryt=False, gus=False, buildinfo=False, financial=False):
         active_modules = ["ADDRESSES"] if not financial else ["ADDRESSES", "FINANCES"]
@@ -451,7 +453,7 @@ class AlgoMapsPlugin:
         if response.status_code == 200:
             return response.json()[0]
         else:
-            self.iface.messageBar().pushMessage(self.tr(u'AlgoMaps Error'),
+            self.iface.messageBar().pushMessage(self.tr(u'AlgoMaps'),
                                                 self.tr(u'Could not fetch the data from server, check the settings'),
                                                 level=Qgis.MessageLevel.Critical)
             return None
