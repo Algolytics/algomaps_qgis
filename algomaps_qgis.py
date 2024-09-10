@@ -24,7 +24,7 @@
 import requests
 from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication, Qt
 from qgis.PyQt.QtGui import QIcon
-from qgis.PyQt.QtWidgets import QAction
+from qgis.PyQt.QtWidgets import QAction, QTableWidgetItem, QComboBox
 
 from qgis.core import (
     Qgis,
@@ -285,6 +285,11 @@ class AlgoMapsPlugin:
                 self.dockwidget.chk_gus.stateChanged.connect(self.settings_chkbox_changed)
                 self.dockwidget.chk_buildinfo.stateChanged.connect(self.settings_chkbox_changed)
                 self.dockwidget.chk_financial.stateChanged.connect(self.settings_chkbox_changed)
+
+                #
+                self.dockwidget.progress_batch.setVisible(False)
+                self.dockwidget.tableWidget_batch.setVisible(False)
+                self.dockwidget.file_batch.fileChanged.connect(self.file_batch_changed)
 
             # connect to provide cleanup on closing of dockwidget
             self.dockwidget.closingPlugin.connect(self.onClosePlugin)
@@ -642,5 +647,66 @@ class AlgoMapsPlugin:
         status_other = ''.join(status_other) if status_other else None
 
         return status_dop, status_geo, status_other
+
+    def file_batch_changed(self):
+        QgsMessageLog.logMessage('CLICKED LOAD', 'AlgoMaps', Qgis.MessageLevel.Info)
+
+        # Check pandas import
+        try:
+            import pandas as pd
+        except ModuleNotFoundError as e:
+            self.iface.messageBar().pushMessage(self.tr(u'AlgoMaps'),
+                                                self.tr(
+                                                    u'Cannot import `pandas` module. Please install it - see README.md for instructions.'),
+                                                level=Qgis.MessageLevel.Critical)
+            return
+
+        def identify_header(path, n=5, th=0.9):
+            df1 = pd.read_csv(path, sep=None, header='infer', nrows=n, on_bad_lines='warn', engine='python',
+                              escapechar='\\')
+            df2 = pd.read_csv(path, sep=None, header=None, nrows=n, on_bad_lines='warn', engine='python',
+                              escapechar='\\')
+            sim = (df1.dtypes.values == df2.dtypes.values).mean()  # Boolean mask array mean
+            return 'infer' if sim < th else None
+
+        try:
+            csv_path = self.dockwidget.file_batch.filePath()
+
+            self.dockwidget.tableWidget_batch.clear()
+            self.dockwidget.tableWidget_batch.setColumnCount(0)
+            self.dockwidget.tableWidget_batch.setRowCount(0)
+
+            if not csv_path:  # Empty fileWidget
+                return
+
+            # Read the first 5 rows (to examine the columns and set the DQ parameters)
+            df = pd.read_csv(csv_path, sep=None, header=identify_header(csv_path), nrows=4, engine='python')
+
+            # Add columns and rows
+            row_count, col_count = df.shape
+            [self.dockwidget.tableWidget_batch.insertColumn(0) for _ in range(col_count)]
+            [self.dockwidget.tableWidget_batch.insertRow(0) for _ in range(row_count+1)]  # One more for comboBoxes
+            self.dockwidget.tableWidget_batch.setHorizontalHeaderLabels([str(col) for col in df.columns])
+
+            # Fill the table with DataFrame values
+            for i, row in enumerate(df.itertuples()):
+                for k in range(col_count):
+                    self.dockwidget.tableWidget_batch.setItem(i, k, QTableWidgetItem(str(row[k])))
+
+            # Add column roles for DQ
+            # TODO
+            for k in range(col_count):
+                self.dockwidget.tableWidget_batch.setItem(row_count, k, QTableWidgetItem('ROLE TODO'))
+
+            # Show the table
+            self.dockwidget.tableWidget_batch.setVisible(True)
+
+        except Exception as e:
+            raise
+            # QgsMessageLog.logMessage(str(e), 'AlgoMaps', Qgis.MessageLevel.Warning)
+            # pass
+
+
+
 
 
