@@ -66,6 +66,7 @@ class AlgoMapsPlugin:
         self.include_financial = None
         self.iface = iface
         self.canvas = self.iface.mapCanvas()
+        self.batch_combo_widgets = []  # List of column-role comboBoxes for Batch processing
 
         # Initialize plugin directory
         self.plugin_dir = os.path.dirname(__file__)
@@ -290,7 +291,8 @@ class AlgoMapsPlugin:
                 self.dockwidget.progress_batch.setVisible(False)
                 self.dockwidget.tableWidget_batch.setVisible(False)
                 self.dockwidget.lbl_records.setVisible(False)
-                self.dockwidget.file_batch.fileChanged.connect(self.file_batch_changed)
+                self.dockwidget.group_batch.setVisible(False)
+                self.dockwidget.file_batch_load.fileChanged.connect(self.file_batch_load_changed)
 
             # connect to provide cleanup on closing of dockwidget
             self.dockwidget.closingPlugin.connect(self.onClosePlugin)
@@ -649,8 +651,9 @@ class AlgoMapsPlugin:
 
         return status_dop, status_geo, status_other
 
-    def file_batch_changed(self):
-        QgsMessageLog.logMessage('CLICKED LOAD', 'AlgoMaps', Qgis.MessageLevel.Info)
+    def file_batch_load_changed(self):
+        if DEBUG_MODE:
+            QgsMessageLog.logMessage('BATCH FILE PATH CHANGED', 'AlgoMaps', Qgis.MessageLevel.Info)
 
         # Check pandas import
         try:
@@ -670,7 +673,7 @@ class AlgoMapsPlugin:
             sim = (df1.dtypes.values == df2.dtypes.values).mean()  # Boolean mask array mean
             return 'infer' if sim < th else None
 
-        def get_file_line_count(path, header=True):
+        def get_file_line_count(path, header=None):
             with open(path, 'rb') as file:
                 for count, _ in enumerate(file):
                     pass
@@ -678,7 +681,7 @@ class AlgoMapsPlugin:
             return count
 
         try:
-            csv_path = self.dockwidget.file_batch.filePath()
+            csv_path = self.dockwidget.file_batch_load.filePath()
 
             self.dockwidget.tableWidget_batch.clear()
             self.dockwidget.tableWidget_batch.setColumnCount(0)
@@ -689,7 +692,7 @@ class AlgoMapsPlugin:
 
             # Read the first 5 rows (to examine the columns and set the DQ parameters)
             header_type = identify_header(csv_path)
-            df = pd.read_csv(csv_path, sep=None, header=header_type, nrows=4, engine='python')
+            df = pd.read_csv(csv_path, sep=None, header=header_type, nrows=4, escapechar='\\', engine='python')
 
             # Add record count to UI
             line_count = get_file_line_count(csv_path, header_type)
@@ -704,17 +707,28 @@ class AlgoMapsPlugin:
             # Fill the table with DataFrame values
             for i, row in enumerate(df.itertuples()):
                 for k in range(col_count):
-                    self.dockwidget.tableWidget_batch.setItem(i, k, QTableWidgetItem(str(row[k])))
+                    self.dockwidget.tableWidget_batch.setItem(i+1, k, QTableWidgetItem(str(row[k+1])))  # k=0 is index
 
             # Add column roles for DQ
-            # TODO
             for k in range(col_count):
-                self.dockwidget.tableWidget_batch.setItem(row_count, k, QTableWidgetItem('ROLE TODO'))
+                new_role_combobox = QComboBox()
+                role_item_list = ['PRZEPISZ', 'POMIN',
+                                'ID_REKORDU',
+                                'DANE_OGOLNE',
+                                'KOD_POCZTOWY', 'MIEJSCOWOSC', 'ULICA_NUMER_DOMU_I_MIESZKANIA', 'ULICA', 'NUMER_DOMU',
+                                'NUMER_MIESZKANIA', 'NUMER_DOMU_I_MIESZKANIA', 'WOJEWODZTWO', 'POWIAT', 'GMINA'
+                                ]
+                new_role_combobox.insertItems(0, role_item_list)
+                new_role_combobox.insertSeparator(4)
+                new_role_combobox.insertSeparator(3)
+                new_role_combobox.insertSeparator(2)
+                self.batch_combo_widgets.append(new_role_combobox)
+                self.dockwidget.tableWidget_batch.setCellWidget(0, k, new_role_combobox)
 
             # Show the table
             self.dockwidget.tableWidget_batch.setVisible(True)
             self.dockwidget.lbl_records.setVisible(True)
-
+            self.dockwidget.group_batch.setVisible(True)
 
         except Exception as e:
             raise
