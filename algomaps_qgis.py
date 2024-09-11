@@ -289,6 +289,7 @@ class AlgoMapsPlugin:
                 #
                 self.dockwidget.progress_batch.setVisible(False)
                 self.dockwidget.tableWidget_batch.setVisible(False)
+                self.dockwidget.lbl_records.setVisible(False)
                 self.dockwidget.file_batch.fileChanged.connect(self.file_batch_changed)
 
             # connect to provide cleanup on closing of dockwidget
@@ -669,6 +670,13 @@ class AlgoMapsPlugin:
             sim = (df1.dtypes.values == df2.dtypes.values).mean()  # Boolean mask array mean
             return 'infer' if sim < th else None
 
+        def get_file_line_count(path, header=True):
+            with open(path, 'rb') as file:
+                for count, _ in enumerate(file):
+                    pass
+            count = count if header else count+1
+            return count
+
         try:
             csv_path = self.dockwidget.file_batch.filePath()
 
@@ -676,11 +684,16 @@ class AlgoMapsPlugin:
             self.dockwidget.tableWidget_batch.setColumnCount(0)
             self.dockwidget.tableWidget_batch.setRowCount(0)
 
-            if not csv_path:  # Empty fileWidget
+            if not csv_path:  # Empty fileWidget path
                 return
 
             # Read the first 5 rows (to examine the columns and set the DQ parameters)
-            df = pd.read_csv(csv_path, sep=None, header=identify_header(csv_path), nrows=4, engine='python')
+            header_type = identify_header(csv_path)
+            df = pd.read_csv(csv_path, sep=None, header=header_type, nrows=4, engine='python')
+
+            # Add record count to UI
+            line_count = get_file_line_count(csv_path, header_type)
+            self.dockwidget.lbl_records.setText(f'Linii: {str(line_count)}')
 
             # Add columns and rows
             row_count, col_count = df.shape
@@ -700,6 +713,8 @@ class AlgoMapsPlugin:
 
             # Show the table
             self.dockwidget.tableWidget_batch.setVisible(True)
+            self.dockwidget.lbl_records.setVisible(True)
+
 
         except Exception as e:
             raise
