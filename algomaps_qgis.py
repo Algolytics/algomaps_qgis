@@ -27,6 +27,7 @@ from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction, QTableWidgetItem, QComboBox
 
 from qgis.core import (
+    QgsApplication,
     Qgis,
     QgsMessageLog,
     QgsProject,
@@ -67,6 +68,8 @@ class AlgoMapsPlugin:
         self.iface = iface
         self.canvas = self.iface.mapCanvas()
         self.batch_combo_widgets = []  # List of column-role comboBoxes for Batch processing
+        self.csv_path = None
+        self.taskManager = QgsApplication.taskManager()
 
         # Initialize plugin directory
         self.plugin_dir = os.path.dirname(__file__)
@@ -280,6 +283,8 @@ class AlgoMapsPlugin:
 
                 self.dockwidget.btn_geocode_general.clicked.connect(self.clicked_geocode_general)
                 self.dockwidget.btn_geocode_details.clicked.connect(self.clicked_geocode_details)
+
+                self.dockwidget.btn_batch_process.clicked.connect(self.clicked_batch_process)
                 
                 # Conenct settings checkboxes
                 self.dockwidget.chk_teryt.stateChanged.connect(self.settings_chkbox_changed)
@@ -681,21 +686,21 @@ class AlgoMapsPlugin:
             return count
 
         try:
-            csv_path = self.dockwidget.file_batch_load.filePath()
+            self.csv_path = self.dockwidget.file_batch_load.filePath()
 
             self.dockwidget.tableWidget_batch.clear()
             self.dockwidget.tableWidget_batch.setColumnCount(0)
             self.dockwidget.tableWidget_batch.setRowCount(0)
 
-            if not csv_path:  # Empty fileWidget path
+            if not self.csv_path:  # Empty fileWidget path
                 return
 
             # Read the first 5 rows (to examine the columns and set the DQ parameters)
-            header_type = identify_header(csv_path)
-            df = pd.read_csv(csv_path, sep=None, header=header_type, nrows=4, escapechar='\\', engine='python')
+            header_type = identify_header(self.csv_path)
+            df = pd.read_csv(self.csv_path, sep=None, header=header_type, nrows=4, escapechar='\\', engine='python')
 
             # Add record count to UI
-            line_count = get_file_line_count(csv_path, header_type)
+            line_count = get_file_line_count(self.csv_path, header_type)
             self.dockwidget.lbl_records.setText(f'Linii: {str(line_count)}')
 
             # Add columns and rows
@@ -734,6 +739,23 @@ class AlgoMapsPlugin:
             raise
             # QgsMessageLog.logMessage(str(e), 'AlgoMaps', Qgis.MessageLevel.Warning)
             # pass
+
+    def clicked_batch_process(self):
+        if DEBUG_MODE:
+            QgsMessageLog.logMessage('CLICKED PROCESS', 'AlgoMaps', Qgis.MessageLevel.Info)
+
+        try:
+            from .BatchGeocoder import BatchGeocoder
+        except:
+            self.iface.messageBar().pushMessage(self.tr(u'AlgoMaps'),
+                                                self.tr(
+                                                 u'Cannot initialize batch processing - error in code. Call the devs!'),
+                                                level=Qgis.MessageLevel.Critical)
+            return
+
+        geocoder = BatchGeocoder(csv_path=self.csv_path, column_roles=[], iface=self.iface, dock_handle=self)
+        self.taskManager.addTask(geocoder)
+        self.dockwidget.progress_batch.setVisible(True)
 
 
 

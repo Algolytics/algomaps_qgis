@@ -18,7 +18,7 @@
     <item row="0" column="0">
      <widget class="QTabWidget" name="tabWidget">
       <property name="currentIndex">
-       <number>1</number>
+       <number>0</number>
       </property>
       <widget class="QWidget" name="tab_single">
        <attribute name="title">
@@ -366,7 +366,7 @@
          </widget>
         </item>
         <item row="6" column="0" colspan="2">
-         <widget class="QTextBrowser" name="textBrowser">
+         <widget class="QTextBrowser" name="txt_output_batch">
           <property name="enabled">
            <bool>true</bool>
           </property>
@@ -477,7 +477,7 @@
             </widget>
            </item>
            <item row="2" column="1" colspan="2">
-            <widget class="QPushButton" name="pushButton">
+            <widget class="QPushButton" name="btn_batch_process">
              <property name="text">
               <string>Rozpocznij przetwarzanie</string>
              </property>
