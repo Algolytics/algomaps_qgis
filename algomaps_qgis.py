@@ -41,12 +41,39 @@ from .resources import *
 
 # Import the code for the DockWidget
 from .algomaps_qgis_dockwidget import AlgoMapsPluginDockWidget
-import os.path
+import os
+import sys
 
 import json
 
 CONFIG_PATH = 'dq_config.json'
 DEBUG_MODE = True  # Verbose messages
+
+
+def find_python():
+    if sys.platform != "win32":
+        return sys.executable
+
+    for path in sys.path:
+        assumed_path = os.path.join(path, "python.exe")
+        if os.path.isfile(assumed_path):
+            return assumed_path
+
+    return None
+
+
+def install_pip(module_name, upgrade=False):
+    import subprocess
+
+    arg_list = [find_python(), '-m', 'pip', 'install', module_name]
+    if upgrade:
+        arg_list.insert(4, '--upgrade')
+
+    result = subprocess.run(arg_list,
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT)
+    print(result.returncode)
+    print(result.stdout)
 
 
 class AlgoMapsPlugin:
@@ -130,6 +157,35 @@ class AlgoMapsPlugin:
                                            self.tr(u'Cannot read config file, check details in "Log Messages" tab.'),
                                            level=Qgis.MessageLevel.Critical)
             QgsMessageLog.logMessage(repr(e), tag='AlgoMaps', level=Qgis.MessageLevel.Critical)
+
+        # Check pandas import
+        try:
+            import pandas as pd
+        except ModuleNotFoundError as e:
+
+            self.iface.messageBar().pushMessage(self.tr(u'AlgoMaps'),
+                                                self.tr(
+                                                    u'Cannot import `pandas` module. Installing... (QGIS window may freeze)'),
+                                                level=Qgis.MessageLevel.Critical)
+
+            install_pip('pandas', upgrade=False)
+
+        # Check dq-client import
+        try:
+            import dq
+
+        except ModuleNotFoundError as e:
+            self.iface.messageBar().pushMessage(self.tr(u'AlgoMaps'),
+                                                self.tr(
+                                                    u'Cannot import `dq-client` module. Installing... (QGIS window may freeze)'),
+                                                level=Qgis.MessageLevel.Critical)
+
+            import subprocess
+
+            install_pip('dq-client', upgrade=False)
+            install_pip('requests', upgrade=True)
+
+
 
     # noinspection PyMethodMayBeStatic
     def tr(self, message):
@@ -676,18 +732,10 @@ class AlgoMapsPlugin:
         return status_dop, status_geo, status_other
 
     def file_batch_load_changed(self):
+        import pandas as pd
+
         if DEBUG_MODE:
             QgsMessageLog.logMessage('BATCH FILE PATH CHANGED', 'AlgoMaps', Qgis.MessageLevel.Info)
-
-        # Check pandas import
-        try:
-            import pandas as pd
-        except ModuleNotFoundError as e:
-            self.iface.messageBar().pushMessage(self.tr(u'AlgoMaps'),
-                                                self.tr(
-                                                    u'Cannot import `pandas` module. Please install it - see README.md for instructions.'),
-                                                level=Qgis.MessageLevel.Critical)
-            return
 
         def identify_header(path, n=5, th=0.9):
             df1 = pd.read_csv(path, sep=None, header='infer', nrows=n, on_bad_lines='warn', engine='python',

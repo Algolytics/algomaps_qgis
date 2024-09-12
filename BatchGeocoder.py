@@ -28,6 +28,7 @@ class BatchGeocoder(QgsTask):
         QgsMessageLog.logMessage("SEND TO DQ...", 'AlgoMaps')
         import time
         import random
+        import dq
 
         roulette = random.randint(1, 5)
         time.sleep(1)
