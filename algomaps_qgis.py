@@ -472,11 +472,11 @@ class AlgoMapsPlugin:
             return None
 
     def add_response_to_map(self, result_json, input_data=None, teryt=False, gus=False, buildinfo=False, financial=False):
-        default_fields_names = ["voivodeshipName", "countyName", "communeName", "postalCode",
+        default_fields_names = ["inputData", "voivodeshipName", "countyName", "communeName", "postalCode",
                                 "cityName", "cityDistrictName", "streetAttribute", "streetName",
                                 "streetNameMajorPart", "streetNameMinorPart", "streetNumber", "apartmentNumber",
                                 "addressId", "numberOfApartments", "numberOfJuridicalPersons",
-                                "latitude", "longitude"]
+                                "latitude", "longitude", "statusMatch", "statusGeocoding", "statusOther"]
 
         default_fields = []
 
@@ -496,7 +496,11 @@ class AlgoMapsPlugin:
         status_match, status_geocode, status_other = self._parse_statuses(status)
 
         default_definitions = [QgsField(x[0], x[1]) for x in default_fields]
-        default_values = [x[2] for x in default_fields]  # Values of fields in order
+        default_values = dict([[x[0], x[2]] for x in default_fields])  # Field-value map
+        default_values['inputData'] = input_data
+        default_values['statusMatch'] = status_match
+        default_values['statusGeocoding'] = status_geocode
+        default_values['statusOther'] = status_other
 
         # Additional fields (checkboxes selected)
         additional_fields = []
@@ -550,7 +554,7 @@ class AlgoMapsPlugin:
                           "incomePercentile75", "incomePercentile95"]:
                 additional_fields.append(self._define_field(field, self._field_double_type, result_json))
 
-        additional_values = [x[2] for x in additional_fields]  # Values of additional fields in order
+        additional_values = dict([[x[0], x[2]] for x in additional_fields])  # Field-value map
         additional_definitions = [QgsField(x[0], x[1]) for x in additional_fields]  # Field definitions for data provider
 
         # Add to map
@@ -563,12 +567,9 @@ class AlgoMapsPlugin:
 
             pr = vl.dataProvider()
 
-            pr.addAttributes([QgsField("inputData", self._field_string_type),
-                              *default_definitions,
-                              QgsField("statusMatch", self._field_string_type),
-                              QgsField("statusGeocoding", self._field_string_type),
-                              QgsField("statusOther", self._field_string_type),
+            pr.addAttributes([*default_definitions,
                               *additional_definitions])
+            vl.updateFields()
         else:
             vl = layer_find[0]
             pr = vl.dataProvider()
@@ -576,13 +577,31 @@ class AlgoMapsPlugin:
         # Create feature
         f = QgsFeature()
         f.setGeometry(QgsGeometry.fromPointXY(QgsPointXY(lon, lat)))
-        f.setAttributes([input_data,
-                         *default_values,
-                         status_match,
-                         status_geocode,
-                         status_other,
-                         *additional_values])
+
+        # Set feature fields as layer fields
+        f.setFields(vl.fields())
+
+        # Populate fields values
+        for key, value in default_values.items():
+            f.setAttribute(key, value)
+
+        cnt_invalid = 0
+        for key, value in additional_values.items():
+            if key in vl.fields().names():
+                f.setAttribute(key, value)
+            else:
+                cnt_invalid += 1
+                if DEBUG_MODE:
+                    QgsMessageLog.logMessage(f'Can\'t add {key}', 'AlgoMaps', Qgis.MessageLevel.Warning)
+
+        if cnt_invalid > 0:
+            self.iface.messageBar().pushMessage(self.tr(u'AlgoMaps'),
+                                                self.tr(
+                                                    f'Nie udało się wypełnić {cnt_invalid} atrybutów. Rozważ usunięcie/zmianę nazwy warstwy, aby poprawnie utworzyć obiekt ze wszystkimi żądanymi atrybutami.'),
+                                                level=Qgis.MessageLevel.Warning)
+
         pr.addFeature(f)
+
         vl.updateFields()
         vl.updateExtents()
 
