@@ -11,7 +11,9 @@ from qgis.core import (
     QgsFeature,
     QgsTask,
     QgsMessageLog,
-    QgsWkbTypes
+    QgsCoordinateTransform,
+    QgsField, QgsFeature, QgsVectorLayer,
+    QgsGeometry, QgsPointXY
     )
 
 from qgis.gui import QgsMessageBar
@@ -63,6 +65,7 @@ class BatchGeocoder(QgsTask):
         self.dock_handle = dock_handle
         self.report_dq = None
         self.exception = None
+        self.job_name = 'ALGOMAPS QGIS test'
 
         self.save_csv_path = save_csv_path
         self.add_to_map = add_to_map
@@ -77,15 +80,15 @@ class BatchGeocoder(QgsTask):
             self._field_string_type = QMetaType.QString
             self._field_int_type = QMetaType.Int
             self._field_double_type = QMetaType.Double
+            self._field_bool_type = QMetaType.Bool
         else:
             from qgis.PyQt.QtCore import QVariant
             self._field_string_type = QVariant.String
             self._field_int_type = QVariant.Int
             self._field_double_type = QVariant.Double
+            self._field_bool_type = QVariant.Bool
 
     def _prepare_dq_job(self, job_name, flags, fields):
-        import time
-        from datetime import datetime
 
         from dq import DQClient, JobConfig
 
@@ -93,7 +96,7 @@ class BatchGeocoder(QgsTask):
                       user=self.dq_user,
                       token=self.dq_token)
 
-        job_config = JobConfig(job_name + str(datetime.now()))
+        job_config = JobConfig(job_name)
         job_config.module_std(address=1)
         job_config.extend(gus=False, geocode=True, diagnostic=True, teryt=True, building_info=False)
 
@@ -107,8 +110,82 @@ class BatchGeocoder(QgsTask):
             i += 1
         return dq, job_config
 
-    def _add_to_map(self, df):
-        pass
+    def _dtype_to_qgis_type(self, dtype):
+        import numpy as np
+        # Mapping dictionary
+        dtype_to_pytype = {
+            np.dtype('int64'): self._field_int_type,
+            np.dtype('int32'): self._field_int_type,
+            np.dtype('int16'): self._field_int_type,
+            np.dtype('float64'): self._field_double_type,
+            np.dtype('float32'): self._field_double_type,
+            np.dtype('float16'): self._field_double_type,
+            np.dtype('str_'): self._field_string_type,
+            np.dtype('O'): self._field_string_type,
+            np.dtype('bool'): self._field_bool_type
+        }
+        try:
+            return dtype_to_pytype[dtype]
+        except KeyError:
+            return self._field_string_type
+        except:
+            raise
+
+    def _add_to_map(self, df, job_name=''):
+
+        fields_definitions = [QgsField(x, self._dtype_to_qgis_type(t)) for x, t in df.dtypes.items()]
+
+        # Add dataframe to layer
+        layer_name = self.job_name
+
+        # Create layer if not exists
+        vl = QgsVectorLayer("Point?crs=epsg:4326", layer_name, "memory")
+        self.dock_handle.qproj.addMapLayer(vl)
+
+        pr = vl.dataProvider()
+
+        pr.addAttributes([*fields_definitions])
+        vl.updateFields()
+
+        # Create feature
+        def df_to_feature(row):
+            try:
+                lon = row["out_wsp_x"]
+                lat = row["out_wsp_y"]
+
+                f = QgsFeature()
+                f.setGeometry(QgsGeometry.fromPointXY(QgsPointXY(lon, lat)))
+
+                # Set feature fields as layer fields
+                f.setFields(vl.fields())
+
+                # Populate fields values
+                # TODO: NaNs
+                for key, value in row.items():
+                    f.setAttribute(key, value)
+
+                pr.addFeature(f)
+                return True
+            except:
+                return False
+
+        df.apply(df_to_feature, axis=1)
+
+        # Update layer
+        vl.updateFields()
+        vl.updateExtents()
+
+        # Zoom to layer extent TODO?
+        canvas = self.iface.mapCanvas()
+        qproj = QgsProject.instance()
+        dest_crs = qproj.crs()
+        transform_context = qproj.transformContext()
+
+        xform = QgsCoordinateTransform(vl.crs(),
+                                       dest_crs,
+                                       transform_context)
+        canvas.setExtent(xform.transform(vl.extent()))
+        canvas.refresh()
 
     def run(self):
         import dq
@@ -127,7 +204,9 @@ class BatchGeocoder(QgsTask):
         cols_dict = dict(zip(col_names, self.column_roles))
 
         flags = [True, False, False, False]  # TODO: from checkbox
-        dq, job_config = self._prepare_dq_job('ALGOMAPS QGIS test', flags, cols_dict)
+        from datetime import datetime
+        self.job_name = f'ALGOMAPS QGIS test {str(datetime.now())}'
+        dq, job_config = self._prepare_dq_job(self.job_name, flags, cols_dict)
 
         wejscie_dq = df.to_csv(None, sep=",", encoding="utf-8",
                                quoting=csv.QUOTE_ALL, index=False)  # Jako string do importu w DQ-Client
@@ -204,7 +283,7 @@ class BatchGeocoder(QgsTask):
                 self.dock_handle.dockwidget.txt_output_batch.setText(str(self.report_dq))
 
             if self.add_to_map:
-                self._add_to_map(self.df_results)  # TODO
+                self._add_to_map(self.df_results, self.job_name)  # TODO
 
         else:
             if self.isCanceled():
