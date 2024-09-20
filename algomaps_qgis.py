@@ -118,7 +118,7 @@ class AlgoMapsPlugin:
         # Declare instance attributes
         self.actions = []
         self.menu = self.tr(u'&AlgoMaps')
-        
+
         # TODO: We are going to let the user set this up in a future iteration
         self.toolbar = self.iface.addToolBar(u'AlgoMapsPlugin')
         self.toolbar.setObjectName(u'AlgoMapsPlugin')
@@ -186,8 +186,6 @@ class AlgoMapsPlugin:
             install_pip('dq-client', upgrade=False)
             install_pip('requests', upgrade=True)
 
-
-
     # noinspection PyMethodMayBeStatic
     def tr(self, message):
         """Get the translation for a string using Qt translation API.
@@ -203,18 +201,17 @@ class AlgoMapsPlugin:
         # noinspection PyTypeChecker,PyArgumentList,PyCallByClass
         return QCoreApplication.translate('AlgoMapsPlugin', message)
 
-
     def add_action(
-        self,
-        icon_path,
-        text,
-        callback,
-        enabled_flag=True,
-        add_to_menu=True,
-        add_to_toolbar=True,
-        status_tip=None,
-        whats_this=None,
-        parent=None):
+            self,
+            icon_path,
+            text,
+            callback,
+            enabled_flag=True,
+            add_to_menu=True,
+            add_to_toolbar=True,
+            status_tip=None,
+            whats_this=None,
+            parent=None):
         """Add a toolbar icon to the toolbar.
 
         :param icon_path: Path to the icon for this action. Can be a resource
@@ -303,7 +300,6 @@ class AlgoMapsPlugin:
 
         self.pluginIsActive = False
 
-
     def unload(self):
         """Removes the plugin menu item and icon from QGIS GUI."""
         for action in self.actions:
@@ -313,7 +309,6 @@ class AlgoMapsPlugin:
             self.iface.removeToolBarIcon(action)
         # Remove the toolbar
         del self.toolbar
-
 
     def run(self):
         """Run method that loads and starts the plugin"""
@@ -342,7 +337,7 @@ class AlgoMapsPlugin:
                 self.dockwidget.btn_geocode_details.clicked.connect(self.clicked_geocode_details)
 
                 self.dockwidget.btn_batch_process.clicked.connect(self.clicked_batch_process)
-                
+
                 # Conenct settings checkboxes
                 self.dockwidget.chk_teryt.stateChanged.connect(self.settings_chkbox_changed)
                 self.dockwidget.chk_gus.stateChanged.connect(self.settings_chkbox_changed)
@@ -353,7 +348,7 @@ class AlgoMapsPlugin:
                 self.dockwidget.progress_batch.setVisible(False)
                 self.dockwidget.btn_cancel_batch.setVisible(False)
                 self.dockwidget.tableWidget_batch.setVisible(False)
-                self.dockwidget.lbl_records.setVisible(False)
+                self.dockwidget.group_csv_info.setVisible(False)
                 self.dockwidget.group_batch.setVisible(False)
                 self.dockwidget.file_batch_load.fileChanged.connect(self.file_batch_load_changed)
                 self.dockwidget.file_batch_save.fileChanged.connect(self.file_batch_save_changed)
@@ -441,7 +436,8 @@ class AlgoMapsPlugin:
         if result_json is None:
             return
 
-        self.dockwidget.txt_outputstand.setText(json.dumps(result_json, indent=2, ensure_ascii=False).encode('utf8').decode())
+        self.dockwidget.txt_outputstand.setText(
+            json.dumps(result_json, indent=2, ensure_ascii=False).encode('utf8').decode())
 
         if 'latitude' in result_json and 'longitude' in result_json:
             self.add_response_to_map(result_json, dane_ogolne, self.include_teryt,
@@ -481,11 +477,12 @@ class AlgoMapsPlugin:
                                                         self.include_gus,
                                                         self.include_buildinfo,
                                                         self.include_financial)
-        
+
         if result_json is None:  # Error
             return
 
-        self.dockwidget.txt_outputstand.setText(json.dumps(result_json, indent=2, ensure_ascii=False).encode('utf8').decode())
+        self.dockwidget.txt_outputstand.setText(
+            json.dumps(result_json, indent=2, ensure_ascii=False).encode('utf8').decode())
 
         if 'latitude' in result_json and 'longitude' in result_json:
             input_text = f'{w}|{p}|{g}|{m}|{k}|{u}|{n}|{l}'
@@ -495,7 +492,7 @@ class AlgoMapsPlugin:
             self.iface.messageBar().pushMessage(self.tr(u'AlgoMaps'),
                                                 self.tr(u'Brak geokodowania dla podanego adresu'),
                                                 level=Qgis.MessageLevel.Warning)
-    
+
     def send_single_algomaps_request(self, req_data, teryt=False, gus=False, buildinfo=False, financial=False):
         active_modules = ["ADDRESSES"] if not financial else ["ADDRESSES", "FINANCES"]
         gus = gus if not financial else True  # If using financial data, we need GUS identifiers
@@ -530,7 +527,8 @@ class AlgoMapsPlugin:
                                                 level=Qgis.MessageLevel.Critical)
             return None
 
-    def add_response_to_map(self, result_json, input_data=None, teryt=False, gus=False, buildinfo=False, financial=False):
+    def add_response_to_map(self, result_json, input_data=None, teryt=False, gus=False, buildinfo=False,
+                            financial=False):
         default_fields_names = ["inputData", "voivodeshipName", "countyName", "communeName", "postalCode",
                                 "cityName", "cityDistrictName", "streetAttribute", "streetName",
                                 "streetNameMajorPart", "streetNameMinorPart", "streetNumber", "apartmentNumber",
@@ -573,7 +571,8 @@ class AlgoMapsPlugin:
             additional_fields.append(self._define_field("streetSymbol", self._field_string_type, result_json))
 
         if gus:
-            additional_fields.append(self._define_field("statisticalRegionSymbol", self._field_string_type, result_json))
+            additional_fields.append(
+                self._define_field("statisticalRegionSymbol", self._field_string_type, result_json))
             additional_fields.append(self._define_field("censusCircuitSymbol", self._field_string_type, result_json))
 
         if buildinfo:
@@ -614,7 +613,8 @@ class AlgoMapsPlugin:
                 additional_fields.append(self._define_field(field, self._field_double_type, result_json))
 
         additional_values = dict([[x[0], x[2]] for x in additional_fields])  # Field-value map
-        additional_definitions = [QgsField(x[0], x[1]) for x in additional_fields]  # Field definitions for data provider
+        additional_definitions = [QgsField(x[0], x[1]) for x in
+                                  additional_fields]  # Field definitions for data provider
 
         # Add to map
         layer_name = "AlgoMaps standaryzacja i geokodowanie"
@@ -690,7 +690,7 @@ class AlgoMapsPlugin:
         # Center map at the point
         self.canvas.setExtent(transformed_rect)
         self.canvas.refresh()
-        
+
     def settings_chkbox_changed(self, i):
         self.include_teryt = True if self.dockwidget.chk_teryt.isChecked() else False
         self.include_gus = True if self.dockwidget.chk_gus.isChecked() else False
@@ -763,23 +763,24 @@ class AlgoMapsPlugin:
             # Add columns and rows
             row_count, col_count = df.shape
             [self.dockwidget.tableWidget_batch.insertColumn(0) for _ in range(col_count)]
-            [self.dockwidget.tableWidget_batch.insertRow(0) for _ in range(row_count+1)]  # One more for comboBoxes
+            [self.dockwidget.tableWidget_batch.insertRow(0) for _ in range(row_count + 1)]  # One more for comboBoxes
             self.dockwidget.tableWidget_batch.setHorizontalHeaderLabels([str(col) for col in df.columns])
 
             # Fill the table with DataFrame values
             for i, row in enumerate(df.itertuples()):
                 for k in range(col_count):
-                    self.dockwidget.tableWidget_batch.setItem(i+1, k, QTableWidgetItem(str(row[k+1])))  # k=0 is index
+                    self.dockwidget.tableWidget_batch.setItem(i + 1, k,
+                                                              QTableWidgetItem(str(row[k + 1])))  # k=0 is index
 
             # Add column roles for DQ
             for k in range(col_count):
                 new_role_combobox = QComboBox()
                 role_item_list = ['PRZEPISZ', 'POMIN',
-                                'ID_REKORDU',
-                                'DANE_OGOLNE',
-                                'KOD_POCZTOWY', 'MIEJSCOWOSC', 'ULICA_NUMER_DOMU_I_MIESZKANIA', 'ULICA', 'NUMER_DOMU',
-                                'NUMER_MIESZKANIA', 'NUMER_DOMU_I_MIESZKANIA', 'WOJEWODZTWO', 'POWIAT', 'GMINA'
-                                ]
+                                  'ID_REKORDU',
+                                  'DANE_OGOLNE',
+                                  'KOD_POCZTOWY', 'MIEJSCOWOSC', 'ULICA_NUMER_DOMU_I_MIESZKANIA', 'ULICA', 'NUMER_DOMU',
+                                  'NUMER_MIESZKANIA', 'NUMER_DOMU_I_MIESZKANIA', 'WOJEWODZTWO', 'POWIAT', 'GMINA'
+                                  ]
                 new_role_combobox.insertItems(0, role_item_list)
                 new_role_combobox.insertSeparator(4)
                 new_role_combobox.insertSeparator(3)
@@ -789,7 +790,7 @@ class AlgoMapsPlugin:
 
             # Show the table
             self.dockwidget.tableWidget_batch.setVisible(True)
-            self.dockwidget.lbl_records.setVisible(True)
+            self.dockwidget.group_csv_info.setVisible(True)
             self.dockwidget.group_batch.setVisible(True)
 
         except Exception as e:
@@ -810,7 +811,7 @@ class AlgoMapsPlugin:
         except:
             self.iface.messageBar().pushMessage(self.tr(u'AlgoMaps'),
                                                 self.tr(
-                                                 u'Cannot initialize batch processing - error in code. Call the devs!'),
+                                                    u'Cannot initialize batch processing - error in code. Call the devs!'),
                                                 level=Qgis.MessageLevel.Critical)
             return
 
@@ -835,8 +836,3 @@ class AlgoMapsPlugin:
             self.dockwidget.chk_save_csv.setChecked(False)
         else:
             self.dockwidget.chk_save_csv.setChecked(True)
-
-
-
-
-

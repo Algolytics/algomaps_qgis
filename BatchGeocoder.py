@@ -79,12 +79,16 @@ class BatchGeocoder(QgsTask):
             from qgis.PyQt.QtCore import QMetaType
             self._field_string_type = QMetaType.QString
             self._field_int_type = QMetaType.Int
+            self._field_long_type = QMetaType.LongLong
+            self._field_short_type = QMetaType.Short
             self._field_double_type = QMetaType.Double
             self._field_bool_type = QMetaType.Bool
         else:
             from qgis.PyQt.QtCore import QVariant
             self._field_string_type = QVariant.String
             self._field_int_type = QVariant.Int
+            self._field_long_type = QVariant.LongLong
+            self._field_short_type = QVariant.Short
             self._field_double_type = QVariant.Double
             self._field_bool_type = QVariant.Bool
 
@@ -115,8 +119,8 @@ class BatchGeocoder(QgsTask):
         # Mapping dictionary
         dtype_to_pytype = {
             np.dtype('int64'): self._field_int_type,
-            np.dtype('int32'): self._field_int_type,
-            np.dtype('int16'): self._field_int_type,
+            np.dtype('int32'): self._field_long_type,
+            np.dtype('int16'): self._field_short_type,
             np.dtype('float64'): self._field_double_type,
             np.dtype('float32'): self._field_double_type,
             np.dtype('float16'): self._field_double_type,
