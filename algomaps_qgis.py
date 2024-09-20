@@ -350,6 +350,7 @@ class AlgoMapsPlugin:
 
                 #
                 self.dockwidget.progress_batch.setVisible(False)
+                self.dockwidget.btn_cancel_batch.setVisible(False)
                 self.dockwidget.tableWidget_batch.setVisible(False)
                 self.dockwidget.lbl_records.setVisible(False)
                 self.dockwidget.group_batch.setVisible(False)
@@ -733,24 +734,10 @@ class AlgoMapsPlugin:
 
     def file_batch_load_changed(self):
         import pandas as pd
+        from .csv_utils import identify_header, get_file_line_count
 
         if DEBUG_MODE:
             QgsMessageLog.logMessage('BATCH FILE PATH CHANGED', 'AlgoMaps', Qgis.MessageLevel.Info)
-
-        def identify_header(path, n=5, th=0.9):
-            df1 = pd.read_csv(path, sep=None, header='infer', nrows=n, on_bad_lines='warn', engine='python',
-                              escapechar='\\')
-            df2 = pd.read_csv(path, sep=None, header=None, nrows=n, on_bad_lines='warn', engine='python',
-                              escapechar='\\')
-            sim = (df1.dtypes.values == df2.dtypes.values).mean()  # Boolean mask array mean
-            return 'infer' if sim < th else None
-
-        def get_file_line_count(path, header=None):
-            with open(path, 'rb') as file:
-                for count, _ in enumerate(file):
-                    pass
-            count = count if header else count+1
-            return count
 
         try:
             self.csv_path = self.dockwidget.file_batch_load.filePath()
@@ -808,8 +795,12 @@ class AlgoMapsPlugin:
             # pass
 
     def clicked_batch_process(self):
+        column_roles = [cb.currentText() for cb in self.batch_combo_widgets]
+        # TODO: check roles
+
         if DEBUG_MODE:
             QgsMessageLog.logMessage('CLICKED PROCESS', 'AlgoMaps', Qgis.MessageLevel.Info)
+            QgsMessageLog.logMessage(f'COLUMN ROLES:\n{column_roles}', 'AlgoMaps', Qgis.MessageLevel.Info)
 
         try:
             from .BatchGeocoder import BatchGeocoder
@@ -820,9 +811,19 @@ class AlgoMapsPlugin:
                                                 level=Qgis.MessageLevel.Critical)
             return
 
-        geocoder = BatchGeocoder(csv_path=self.csv_path, column_roles=[], iface=self.iface, dock_handle=self)
+        geocoder = BatchGeocoder(csv_path=self.csv_path,
+                                 column_roles=column_roles,
+                                 iface=self.iface,
+                                 dq_user=self.dq_user,
+                                 dq_token=self.dq_token,
+                                 dock_handle=self,
+                                 add_to_map=self.dockwidget.chk_add_map.isChecked(),
+                                 save_to_csv=self.dockwidget.chk_save_csv.isChecked())
         self.taskManager.addTask(geocoder)
         self.dockwidget.progress_batch.setVisible(True)
+        self.dockwidget.btn_cancel_batch.setVisible(True)
+        self.dockwidget.btn_batch_process.setEnabled(False)
+        self.dockwidget.btn_batch_process.setText('Przetwarzanie...')
 
 
 

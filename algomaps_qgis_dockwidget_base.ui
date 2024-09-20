@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>544</width>
-    <height>565</height>
+    <height>588</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -289,6 +289,9 @@
         </item>
         <item row="0" column="3" alignment="Qt::AlignLeft">
          <widget class="QPushButton" name="btn_geocode_general">
+          <property name="enabled">
+           <bool>true</bool>
+          </property>
           <property name="sizePolicy">
            <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
             <horstretch>0</horstretch>
@@ -303,6 +306,18 @@
           </property>
           <property name="text">
            <string>Geokoduj</string>
+          </property>
+          <property name="checkable">
+           <bool>false</bool>
+          </property>
+          <property name="autoDefault">
+           <bool>false</bool>
+          </property>
+          <property name="default">
+           <bool>false</bool>
+          </property>
+          <property name="flat">
+           <bool>false</bool>
           </property>
          </widget>
         </item>
@@ -342,37 +357,27 @@
         <string>Batch</string>
        </attribute>
        <layout class="QGridLayout" name="gridLayout_4">
-        <item row="5" column="0" colspan="2">
-         <widget class="QProgressBar" name="progress_batch">
-          <property name="enabled">
-           <bool>false</bool>
+        <item row="0" column="0">
+         <widget class="QLabel" name="lbl_csv_file">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
           </property>
-          <property name="maximum">
-           <number>0</number>
-          </property>
-          <property name="value">
-           <number>0</number>
-          </property>
-          <property name="textVisible">
-           <bool>false</bool>
+          <property name="text">
+           <string>Plik CSV:</string>
           </property>
          </widget>
         </item>
-        <item row="0" column="1">
+        <item row="0" column="1" colspan="2">
          <widget class="QgsFileWidget" name="file_batch_load">
           <property name="filter">
            <string>Pliki CSV (*.csv)</string>
           </property>
          </widget>
         </item>
-        <item row="6" column="0" colspan="2">
-         <widget class="QTextBrowser" name="txt_output_batch">
-          <property name="enabled">
-           <bool>true</bool>
-          </property>
-         </widget>
-        </item>
-        <item row="1" column="0" colspan="2">
+        <item row="1" column="0" colspan="3">
          <widget class="QTableWidget" name="tableWidget_batch">
           <property name="sizePolicy">
            <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
@@ -411,33 +416,43 @@
           <row/>
          </widget>
         </item>
-        <item row="2" column="0" colspan="2" alignment="Qt::AlignRight">
-         <widget class="QLabel" name="lbl_records">
-          <property name="minimumSize">
-           <size>
-            <width>0</width>
-            <height>0</height>
-           </size>
+        <item row="3" column="0" colspan="3">
+         <widget class="QGroupBox" name="group_batch">
+          <property name="title">
+           <string>Ustawienia dodatkowe</string>
           </property>
-          <property name="text">
-           <string>Rekordów: x</string>
-          </property>
+          <layout class="QGridLayout" name="gridLayout_8">
+           <item row="0" column="1">
+            <widget class="QCheckBox" name="chk_save_csv">
+             <property name="text">
+              <string>Zapisz jako plik CSV: </string>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="2" colspan="2">
+            <widget class="QgsFileWidget" name="file_batch_save"/>
+           </item>
+           <item row="1" column="1" colspan="2">
+            <widget class="QCheckBox" name="chk_add_map">
+             <property name="text">
+              <string>Dodaj warstwę do mapy</string>
+             </property>
+             <property name="checked">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+           <item row="2" column="1" colspan="3">
+            <widget class="QPushButton" name="btn_batch_process">
+             <property name="text">
+              <string>Rozpocznij przetwarzanie</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
          </widget>
         </item>
-        <item row="0" column="0">
-         <widget class="QLabel" name="lbl_csv_file">
-          <property name="sizePolicy">
-           <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
-            <horstretch>0</horstretch>
-            <verstretch>0</verstretch>
-           </sizepolicy>
-          </property>
-          <property name="text">
-           <string>Plik CSV:</string>
-          </property>
-         </widget>
-        </item>
-        <item row="4" column="0">
+        <item row="4" column="0" colspan="3">
          <spacer name="verticalSpacer">
           <property name="orientation">
            <enum>Qt::Vertical</enum>
@@ -450,40 +465,86 @@
           </property>
          </spacer>
         </item>
-        <item row="3" column="0" colspan="2">
-         <widget class="QGroupBox" name="group_batch">
-          <property name="title">
-           <string>Ustawienia dodatkowe</string>
+        <item row="5" column="0" colspan="2">
+         <widget class="QProgressBar" name="progress_batch">
+          <property name="enabled">
+           <bool>false</bool>
           </property>
-          <layout class="QGridLayout" name="gridLayout_8">
-           <item row="0" column="2">
-            <widget class="QgsFileWidget" name="file_batch_save"/>
-           </item>
-           <item row="0" column="1">
-            <widget class="QCheckBox" name="chk_save_csv">
-             <property name="text">
-              <string>Zapisz jako plik CSV: </string>
-             </property>
-            </widget>
-           </item>
-           <item row="1" column="1">
-            <widget class="QCheckBox" name="chk_add_map">
-             <property name="text">
-              <string>Dodaj warstwę do mapy</string>
-             </property>
-             <property name="checked">
-              <bool>true</bool>
-             </property>
-            </widget>
-           </item>
-           <item row="2" column="1" colspan="2">
-            <widget class="QPushButton" name="btn_batch_process">
-             <property name="text">
-              <string>Rozpocznij przetwarzanie</string>
-             </property>
-            </widget>
-           </item>
-          </layout>
+          <property name="maximum">
+           <number>0</number>
+          </property>
+          <property name="value">
+           <number>0</number>
+          </property>
+          <property name="textVisible">
+           <bool>false</bool>
+          </property>
+         </widget>
+        </item>
+        <item row="5" column="2">
+         <widget class="QPushButton" name="btn_cancel_batch">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="minimumSize">
+           <size>
+            <width>0</width>
+            <height>0</height>
+           </size>
+          </property>
+          <property name="maximumSize">
+           <size>
+            <width>20</width>
+            <height>16777215</height>
+           </size>
+          </property>
+          <property name="baseSize">
+           <size>
+            <width>0</width>
+            <height>0</height>
+           </size>
+          </property>
+          <property name="font">
+           <font>
+            <weight>75</weight>
+            <bold>true</bold>
+           </font>
+          </property>
+          <property name="toolTip">
+           <string>Anuluj zadanie</string>
+          </property>
+          <property name="text">
+           <string>X</string>
+          </property>
+         </widget>
+        </item>
+        <item row="6" column="0" colspan="3">
+         <widget class="QTextBrowser" name="txt_output_batch">
+          <property name="enabled">
+           <bool>true</bool>
+          </property>
+          <property name="cursor" stdset="0">
+           <cursorShape>ArrowCursor</cursorShape>
+          </property>
+         </widget>
+        </item>
+        <item row="2" column="1" colspan="2">
+         <widget class="QLabel" name="lbl_records">
+          <property name="minimumSize">
+           <size>
+            <width>0</width>
+            <height>0</height>
+           </size>
+          </property>
+          <property name="text">
+           <string>Rekordów: x</string>
+          </property>
+          <property name="alignment">
+           <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+          </property>
          </widget>
         </item>
        </layout>
@@ -676,15 +737,21 @@
   <tabstop>txt_flatno</tabstop>
   <tabstop>btn_geocode_details</tabstop>
   <tabstop>txt_outputstand</tabstop>
+  <tabstop>txt_api_key</tabstop>
   <tabstop>txt_dq_user</tabstop>
   <tabstop>txt_dq_token</tabstop>
-  <tabstop>btn_settings_reset</tabstop>
-  <tabstop>txt_api_key</tabstop>
   <tabstop>chk_teryt</tabstop>
-  <tabstop>chk_buildinfo</tabstop>
   <tabstop>chk_gus</tabstop>
+  <tabstop>chk_buildinfo</tabstop>
   <tabstop>chk_financial</tabstop>
   <tabstop>btn_settings_save</tabstop>
+  <tabstop>btn_settings_reset</tabstop>
+  <tabstop>tableWidget_batch</tabstop>
+  <tabstop>chk_save_csv</tabstop>
+  <tabstop>chk_add_map</tabstop>
+  <tabstop>btn_batch_process</tabstop>
+  <tabstop>btn_cancel_batch</tabstop>
+  <tabstop>txt_output_batch</tabstop>
  </tabstops>
  <resources/>
  <connections/>
