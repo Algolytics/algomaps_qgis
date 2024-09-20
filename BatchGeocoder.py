@@ -1,3 +1,4 @@
+import os
 import time
 import urllib.request
 import urllib.parse
@@ -16,6 +17,7 @@ from qgis.core import (
 from qgis.gui import QgsMessageBar
 from qgis.PyQt.QtCore import QObject, pyqtSignal
 DEBUG_MODE = True  # Verbose messages
+TEMP_OUT_CSV = 'temp.csv'  # Ścieżka do pliku csv z wystandaryzowanymi i zgeokodowanymi adresami
 
 
 def _read_csv(csv_path):
@@ -51,7 +53,7 @@ def _read_csv(csv_path):
 
 
 class BatchGeocoder(QgsTask):
-    def __init__(self, csv_path, column_roles, iface, dq_user, dq_token, dock_handle=None, save_to_csv=False, add_to_map=True):
+    def __init__(self, csv_path, column_roles, iface, dq_user, dq_token, dock_handle=None, save_csv_path=None, add_to_map=True):
         super().__init__("AlgoMaps batch geocoding", QgsTask.CanCancel)
         self.csv_path = csv_path
         self.column_roles = column_roles
@@ -62,8 +64,10 @@ class BatchGeocoder(QgsTask):
         self.report_dq = None
         self.exception = None
 
-        self.save_to_csv = save_to_csv
+        self.save_csv_path = save_csv_path
         self.add_to_map = add_to_map
+
+        self.df_results = None  # Output from DQ
 
         if self.dock_handle:
             self.dock_handle.dockwidget.btn_cancel_batch.clicked.connect(self.cancel)
@@ -112,7 +116,6 @@ class BatchGeocoder(QgsTask):
 
         QgsMessageLog.logMessage("SEND TO DQ...", 'AlgoMaps', level=Qgis.MessageLevel.Info)
 
-        output_dq_csv = 'temp.csv'  # Ścieżka do pliku csv z wystandaryzowanymi i zgeokodowanymi adresami
         df = _read_csv(self.csv_path)
 
         # DataFrame is empty
@@ -143,6 +146,7 @@ class BatchGeocoder(QgsTask):
         i = 0
         max_i = int(timeout / sleep_time)
 
+        # Check DQ job status loop
         while True:
             if self.isCanceled():
                 dq.cancel_job(job.id)
@@ -162,23 +166,33 @@ class BatchGeocoder(QgsTask):
                 return False
 
             i += 1
-            time.sleep(sleep_time)  # 1 minuta
+            time.sleep(sleep_time)
 
+        # Job finished
         try:
             report = dq.job_report(job.id)
             QgsMessageLog.logMessage(f'Report: {report.results}', 'AlgoMaps')
             if state == "FINISHED_PAID":
                 QgsMessageLog.logMessage(f'Qualiy issues: {report.quality_issues}', 'AlgoMaps')
                 QgsMessageLog.logMessage("Eksportuję zgeokodowane dane...", 'AlgoMaps')
-                dq.job_results(job.id, output_dq_csv)
+                dq.job_results(job.id, TEMP_OUT_CSV)
                 self.report_dq = report.results
             else:
                 return False
 
             import pandas as pd
-            self.df_results = pd.read_csv(output_dq_csv)
-            # self.results_txt =
+            self.df_results = pd.read_csv(TEMP_OUT_CSV)
+
+            # Move to user's CSV or else remove the temporary CSV
+            if self.save_csv_path:
+                os.replace(TEMP_OUT_CSV, self.save_csv_path)
+                QgsMessageLog.logMessage(f"Zapisano plik {self.save_csv_path}",
+                                         'AlgoMaps',
+                                         Qgis.MessageLevel.Info)
+            else:
+                os.remove(TEMP_OUT_CSV)
             return True
+
         except Exception as e:
             self.exception = e
             return False
@@ -196,15 +210,15 @@ class BatchGeocoder(QgsTask):
             if self.isCanceled():
                 QgsMessageLog.logMessage("CANCELED", 'AlgoMaps', Qgis.MessageLevel.Warning)
                 if self.dock_handle:
-                    self.dock_handle.dockwidget.txt_output_batch.setText('CANCELED?')
+                    self.dock_handle.dockwidget.txt_output_batch.setText('CANCELED')
             elif self.exception is None:
-                QgsMessageLog.logMessage("ERROR?.", 'AlgoMaps', Qgis.MessageLevel.Warning)
+                QgsMessageLog.logMessage("ERROR", 'AlgoMaps', Qgis.MessageLevel.Warning)
                 if self.dock_handle:
-                    self.dock_handle.dockwidget.txt_output_batch.setText('ERROR?')
+                    self.dock_handle.dockwidget.txt_output_batch.setText('ERROR UNKNOWN')
             else:
                 QgsMessageLog.logMessage(f"Exception {self.exception}", 'AlgoMaps', Qgis.MessageLevel.Warning)
                 if self.dock_handle:
-                    self.dock_handle.dockwidget.txt_output_batch.setText(f'{self.exception}')
+                    self.dock_handle.dockwidget.txt_output_batch.setText(f'Exception: \n{self.exception}')
 
         if self.dock_handle:
             self.dock_handle.dockwidget.progress_batch.setVisible(False)

@@ -96,6 +96,7 @@ class AlgoMapsPlugin:
         self.canvas = self.iface.mapCanvas()
         self.batch_combo_widgets = []  # List of column-role comboBoxes for Batch processing
         self.csv_path = None
+        self.csv_path_output = None
         self.taskManager = QgsApplication.taskManager()
 
         # Initialize plugin directory
@@ -355,6 +356,7 @@ class AlgoMapsPlugin:
                 self.dockwidget.lbl_records.setVisible(False)
                 self.dockwidget.group_batch.setVisible(False)
                 self.dockwidget.file_batch_load.fileChanged.connect(self.file_batch_load_changed)
+                self.dockwidget.file_batch_save.fileChanged.connect(self.file_batch_save_changed)
 
             # connect to provide cleanup on closing of dockwidget
             self.dockwidget.closingPlugin.connect(self.onClosePlugin)
@@ -755,7 +757,7 @@ class AlgoMapsPlugin:
 
             # Add record count to UI
             line_count = get_file_line_count(self.csv_path, header_type)
-            self.dockwidget.lbl_records.setText(f'Linii: {str(line_count)}')
+            self.dockwidget.lbl_records.setText(f'Rekordów: {str(line_count)}')
 
             # Add columns and rows
             row_count, col_count = df.shape
@@ -818,12 +820,20 @@ class AlgoMapsPlugin:
                                  dq_token=self.dq_token,
                                  dock_handle=self,
                                  add_to_map=self.dockwidget.chk_add_map.isChecked(),
-                                 save_to_csv=self.dockwidget.chk_save_csv.isChecked())
+                                 save_csv_path=self.csv_path_output)
         self.taskManager.addTask(geocoder)
         self.dockwidget.progress_batch.setVisible(True)
         self.dockwidget.btn_cancel_batch.setVisible(True)
         self.dockwidget.btn_batch_process.setEnabled(False)
         self.dockwidget.btn_batch_process.setText('Przetwarzanie...')
+        self.dockwidget.txt_output_batch.setText('Przetwarzanie zadania może zająć nawet kilkudziesiąt minut')
+
+    def file_batch_save_changed(self):
+        self.csv_path_output = self.dockwidget.file_batch_save.filePath()
+        if not self.csv_path_output:
+            self.dockwidget.chk_save_csv.setChecked(False)
+        else:
+            self.dockwidget.chk_save_csv.setChecked(True)
 
 
 
