@@ -736,7 +736,7 @@ class AlgoMapsPlugin:
 
     def file_batch_load_changed(self):
         import pandas as pd
-        from .csv_utils import identify_header, get_file_line_count
+        from .csv_utils import identify_header, get_file_line_count, identify_delimiter
 
         if DEBUG_MODE:
             QgsMessageLog.logMessage('BATCH FILE PATH CHANGED', 'AlgoMaps', Qgis.MessageLevel.Info)
@@ -752,8 +752,9 @@ class AlgoMapsPlugin:
                 return
 
             # Read the first 5 rows (to examine the columns and set the DQ parameters)
-            header_type = identify_header(self.csv_path)
-            df = pd.read_csv(self.csv_path, sep=None, header=header_type, nrows=4, escapechar='\\', engine='python')
+            sep = identify_delimiter(self.csv_path)
+            header_type = identify_header(self.csv_path, sep=sep)
+            df = pd.read_csv(self.csv_path, sep=sep, header=header_type, nrows=4, escapechar='\\', engine='python')
 
             # Add record count to UI
             line_count = get_file_line_count(self.csv_path, header_type)

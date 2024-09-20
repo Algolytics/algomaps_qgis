@@ -1,8 +1,16 @@
-def identify_header(path, n=5, th=0.9):
+def identify_delimiter(filename):
+    import csv
+    sniffer = csv.Sniffer()
+    with open(filename) as fp:
+        delimiter = sniffer.sniff(fp.read(5000)).delimiter
+    return delimiter
+
+
+def identify_header(path, n=5, th=0.9, sep=None):
     import pandas as pd
-    df1 = pd.read_csv(path, sep=None, header='infer', nrows=n, on_bad_lines='warn', engine='python',
+    df1 = pd.read_csv(path, sep=sep, header='infer', nrows=n, on_bad_lines='warn', engine='python',
                       escapechar='\\')
-    df2 = pd.read_csv(path, sep=None, header=None, nrows=n, on_bad_lines='warn', engine='python',
+    df2 = pd.read_csv(path, sep=sep, header=None, nrows=n, on_bad_lines='warn', engine='python',
                       escapechar='\\')
     sim = (df1.dtypes.values == df2.dtypes.values).mean()  # Boolean mask array mean
     return 'infer' if sim < th else None
