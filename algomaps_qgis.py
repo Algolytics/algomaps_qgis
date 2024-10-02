@@ -21,7 +21,6 @@
  *                                                                         *
  ***************************************************************************/
 """
-import requests
 from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication, Qt
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction, QTableWidgetItem, QComboBox
@@ -72,8 +71,9 @@ def install_pip(module_name, upgrade=False):
     result = subprocess.run(arg_list,
                             stdout=subprocess.PIPE,
                             stderr=subprocess.STDOUT)
-    print(result.returncode)
-    print(result.stdout)
+    QgsMessageLog.logMessage(f'Install {module_name}', level=Qgis.MessageLevel.Info)
+    QgsMessageLog.logMessage(f'Return code: {result.returncode}', level=Qgis.MessageLevel.Info)
+    QgsMessageLog.logMessage(f'Stdout: {result.stdout.decode(encoding="utf-8")}', level=Qgis.MessageLevel.Info)
 
 
 class AlgoMapsPlugin:
@@ -161,33 +161,6 @@ class AlgoMapsPlugin:
                                            self.tr(u'Cannot read config file, check details in "Log Messages" tab.'),
                                            level=Qgis.MessageLevel.Critical)
             QgsMessageLog.logMessage(repr(e), tag='AlgoMaps', level=Qgis.MessageLevel.Critical)
-
-        # Check pandas import
-        try:
-            import pandas as pd
-        except ModuleNotFoundError as e:
-
-            self.iface.messageBar().pushMessage(self.tr(u'AlgoMaps'),
-                                                self.tr(
-                                                    u'Cannot import `pandas` module. Installing... (QGIS window may freeze)'),
-                                                level=Qgis.MessageLevel.Critical)
-
-            install_pip('pandas', upgrade=False)
-
-        # Check dq-client import
-        try:
-            import dq
-
-        except ModuleNotFoundError as e:
-            self.iface.messageBar().pushMessage(self.tr(u'AlgoMaps'),
-                                                self.tr(
-                                                    u'Cannot import `dq-client` module. Installing... (QGIS window may freeze)'),
-                                                level=Qgis.MessageLevel.Critical)
-
-            import subprocess
-
-            install_pip('dq-client', upgrade=False)
-            install_pip('requests', upgrade=True)
 
     # noinspection PyMethodMayBeStatic
     def tr(self, message):
@@ -288,6 +261,35 @@ class AlgoMapsPlugin:
             parent=self.iface.mainWindow())
 
         self.qproj = QgsProject.instance()
+
+        # Check pandas import
+        try:
+            import pandas as pd
+        except ModuleNotFoundError as e:
+
+            self.iface.messageBar().pushMessage(self.tr(u'AlgoMaps'),
+                                                self.tr(
+                                                    u'Cannot import `pandas` module. Installing... (QGIS window may freeze)'),
+                                                level=Qgis.MessageLevel.Warning)
+
+            QgsMessageLog.logMessage('Installing pandas...', level=Qgis.MessageLevel.Info)
+            install_pip('pandas', upgrade=False)
+
+        # Check dq-client import
+        try:
+            import dq
+
+        except ModuleNotFoundError as e:
+            self.iface.messageBar().pushMessage(self.tr(u'AlgoMaps'),
+                                                self.tr(
+                                                    u'Cannot import `dq-client` module. Installing... (QGIS window may freeze)'),
+                                                level=Qgis.MessageLevel.Warning)
+
+            import subprocess
+            QgsMessageLog.logMessage('Installing dq-client...', level=Qgis.MessageLevel.Info)
+            install_pip('dq-client', upgrade=False)
+            QgsMessageLog.logMessage('Installing requests...', level=Qgis.MessageLevel.Info)
+            install_pip('requests', upgrade=True)
 
     def onClosePlugin(self):
         """Cleanup necessary items here when plugin dockwidget is closed"""
@@ -499,6 +501,8 @@ class AlgoMapsPlugin:
                                                 level=Qgis.MessageLevel.Warning)
 
     def send_single_algomaps_request(self, req_data, teryt=False, gus=False, buildinfo=False, financial=False):
+        import requests
+
         active_modules = ["ADDRESSES"] if not financial else ["ADDRESSES", "FINANCES"]
         gus = gus if not financial else True  # If using financial data, we need GUS identifiers
         input_json = {
