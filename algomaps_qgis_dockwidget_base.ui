@@ -18,7 +18,7 @@
     <item row="0" column="0">
      <widget class="QTabWidget" name="tabWidget">
       <property name="currentIndex">
-       <number>0</number>
+       <number>1</number>
       </property>
       <widget class="QWidget" name="tab_single">
        <attribute name="title">
@@ -563,7 +563,7 @@
             <widget class="QLineEdit" name="txt_sep">
              <property name="maximumSize">
               <size>
-               <width>15</width>
+               <width>16</width>
                <height>16777215</height>
               </size>
              </property>
@@ -582,7 +582,7 @@
              </property>
              <property name="maximumSize">
               <size>
-               <width>15</width>
+               <width>16</width>
                <height>16777215</height>
               </size>
              </property>

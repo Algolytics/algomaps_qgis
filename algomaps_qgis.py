@@ -88,6 +88,9 @@ class AlgoMapsPlugin:
         :type iface: QgsInterface
         """
         # Save reference to the QGIS interface
+        self.batch_header_type = None
+        self.batch_quote = None
+        self.batch_sep = None
         self.include_gus = None
         self.include_teryt = None
         self.include_buildinfo = None
@@ -344,7 +347,7 @@ class AlgoMapsPlugin:
                 self.dockwidget.chk_buildinfo.stateChanged.connect(self.settings_chkbox_changed)
                 self.dockwidget.chk_financial.stateChanged.connect(self.settings_chkbox_changed)
 
-                #
+                # Batch UI
                 self.dockwidget.progress_batch.setVisible(False)
                 self.dockwidget.btn_cancel_batch.setVisible(False)
                 self.dockwidget.tableWidget_batch.setVisible(False)
@@ -352,6 +355,8 @@ class AlgoMapsPlugin:
                 self.dockwidget.group_batch.setVisible(False)
                 self.dockwidget.file_batch_load.fileChanged.connect(self.file_batch_load_changed)
                 self.dockwidget.file_batch_save.fileChanged.connect(self.file_batch_save_changed)
+                self.dockwidget.txt_sep.textEdited.connect(self.txt_sep_changed)
+                self.dockwidget.txt_quotechar.textEdited.connect(self.txt_quotechar_changed)
 
             # connect to provide cleanup on closing of dockwidget
             self.dockwidget.closingPlugin.connect(self.onClosePlugin)
@@ -735,8 +740,7 @@ class AlgoMapsPlugin:
         return status_dop, status_geo, status_other
 
     def file_batch_load_changed(self):
-        import pandas as pd
-        from .csv_utils import identify_header, get_file_line_count, identify_delimiter
+        from .csv_utils import identify_header, identify_delimiter_and_quotechar
 
         if DEBUG_MODE:
             QgsMessageLog.logMessage('BATCH FILE PATH CHANGED', 'AlgoMaps', Qgis.MessageLevel.Info)
@@ -744,54 +748,21 @@ class AlgoMapsPlugin:
         try:
             self.csv_path = self.dockwidget.file_batch_load.filePath()
 
-            self.dockwidget.tableWidget_batch.clear()
-            self.dockwidget.tableWidget_batch.setColumnCount(0)
-            self.dockwidget.tableWidget_batch.setRowCount(0)
-
             if not self.csv_path:  # Empty fileWidget path
                 return
 
-            # Read the first 5 rows (to examine the columns and set the DQ parameters)
-            sep = identify_delimiter(self.csv_path)
-            header_type = identify_header(self.csv_path, sep=sep)
-            df = pd.read_csv(self.csv_path, sep=sep, header=header_type, nrows=4, escapechar='\\', engine='python')
+            # Infer the csv separator and quoting char
+            sep, quotechar = identify_delimiter_and_quotechar(self.csv_path)
+            if DEBUG_MODE:
+                QgsMessageLog.logMessage(f'Separator: {sep} / Quotechar: {quotechar}', 'AlgoMaps', Qgis.MessageLevel.Info)
 
-            # Add record count to UI
-            line_count = get_file_line_count(self.csv_path, header_type)
-            self.dockwidget.lbl_records.setText(f'Rekordów: {str(line_count)}')
+            self.batch_sep = str(sep)
+            self.batch_quote = str(quotechar)
+            self.batch_header_type = identify_header(self.csv_path, sep=sep)
+            self.dockwidget.txt_sep.setText(str(sep))
+            self.dockwidget.txt_quotechar.setText(str(quotechar))
 
-            # Add columns and rows
-            row_count, col_count = df.shape
-            [self.dockwidget.tableWidget_batch.insertColumn(0) for _ in range(col_count)]
-            [self.dockwidget.tableWidget_batch.insertRow(0) for _ in range(row_count + 1)]  # One more for comboBoxes
-            self.dockwidget.tableWidget_batch.setHorizontalHeaderLabels([str(col) for col in df.columns])
-
-            # Fill the table with DataFrame values
-            for i, row in enumerate(df.itertuples()):
-                for k in range(col_count):
-                    self.dockwidget.tableWidget_batch.setItem(i + 1, k,
-                                                              QTableWidgetItem(str(row[k + 1])))  # k=0 is index
-
-            # Add column roles for DQ
-            for k in range(col_count):
-                new_role_combobox = QComboBox()
-                role_item_list = ['PRZEPISZ', 'POMIN',
-                                  'ID_REKORDU',
-                                  'DANE_OGOLNE',
-                                  'KOD_POCZTOWY', 'MIEJSCOWOSC', 'ULICA_NUMER_DOMU_I_MIESZKANIA', 'ULICA', 'NUMER_DOMU',
-                                  'NUMER_MIESZKANIA', 'NUMER_DOMU_I_MIESZKANIA', 'WOJEWODZTWO', 'POWIAT', 'GMINA'
-                                  ]
-                new_role_combobox.insertItems(0, role_item_list)
-                new_role_combobox.insertSeparator(4)
-                new_role_combobox.insertSeparator(3)
-                new_role_combobox.insertSeparator(2)
-                self.batch_combo_widgets.append(new_role_combobox)
-                self.dockwidget.tableWidget_batch.setCellWidget(0, k, new_role_combobox)
-
-            # Show the table
-            self.dockwidget.tableWidget_batch.setVisible(True)
-            self.dockwidget.group_csv_info.setVisible(True)
-            self.dockwidget.group_batch.setVisible(True)
+            self.show_csv_table(self.csv_path, sep=self.batch_sep, header_type=self.batch_header_type, quotechar=self.batch_quote)
 
         except Exception as e:
             raise
@@ -801,6 +772,7 @@ class AlgoMapsPlugin:
     def clicked_batch_process(self):
         column_roles = [cb.currentText() for cb in self.batch_combo_widgets]
         # TODO: check roles
+        # TODO: check if save as csv and filepath not empty
 
         if DEBUG_MODE:
             QgsMessageLog.logMessage('CLICKED PROCESS', 'AlgoMaps', Qgis.MessageLevel.Info)
@@ -818,17 +790,21 @@ class AlgoMapsPlugin:
         geocoder = BatchGeocoder(csv_path=self.csv_path,
                                  column_roles=column_roles,
                                  iface=self.iface,
+                                 dock_handle=self.dockwidget,
+                                 qproj=self.qproj,
                                  dq_user=self.dq_user,
                                  dq_token=self.dq_token,
-                                 dock_handle=self,
                                  add_to_map=self.dockwidget.chk_add_map.isChecked(),
-                                 save_csv_path=self.csv_path_output)
+                                 save_csv_path=self.csv_path_output,
+                                 header_type=self.batch_header_type,
+                                 sep=self.batch_sep,
+                                 quote=self.batch_quote)
         self.taskManager.addTask(geocoder)
         self.dockwidget.progress_batch.setVisible(True)
         self.dockwidget.btn_cancel_batch.setVisible(True)
         self.dockwidget.btn_batch_process.setEnabled(False)
         self.dockwidget.btn_batch_process.setText('Przetwarzanie...')
-        self.dockwidget.txt_output_batch.setText('Przetwarzanie zadania może zająć nawet kilkudziesiąt minut')
+        self.dockwidget.txt_output_batch.setText('Przetwarzanie zadania może zająć nawet kilkanaście minut')
 
     def file_batch_save_changed(self):
         self.csv_path_output = self.dockwidget.file_batch_save.filePath()
@@ -836,3 +812,82 @@ class AlgoMapsPlugin:
             self.dockwidget.chk_save_csv.setChecked(False)
         else:
             self.dockwidget.chk_save_csv.setChecked(True)
+
+    def txt_sep_changed(self):
+        new_sep = self.dockwidget.txt_sep.text()
+        QgsMessageLog.logMessage(f'CHANGED SEP: {new_sep}', 'AlgoMaps', Qgis.MessageLevel.Info)
+        if not new_sep:  # Empty lineEdit
+            return
+        if new_sep == '\\':
+            return
+        if new_sep == r'\t':
+            new_sep = '\t'
+        self.batch_sep = new_sep
+        self.show_csv_table(self.csv_path, self.batch_sep, self.batch_header_type, self.batch_quote)
+
+    def txt_quotechar_changed(self):
+        new_quote = self.dockwidget.txt_quotechar.text()
+        QgsMessageLog.logMessage(f'CHANGED QUOTECHAR: {new_quote}', 'AlgoMaps', Qgis.MessageLevel.Info)
+        if not new_quote:  # Empty lineEdit
+            return
+        if len(new_quote) > 1:
+            return
+        self.batch_quote = new_quote
+        self.show_csv_table(self.csv_path, self.batch_sep, self.batch_header_type, self.batch_quote)
+
+    def show_csv_table(self, csv_path, sep=',', header_type=None, quotechar='"'):
+        if DEBUG_MODE:
+            QgsMessageLog.logMessage(f'SHOW TABLE', 'AlgoMaps', Qgis.MessageLevel.Info)
+            QgsMessageLog.logMessage(f'{csv_path} {sep} {header_type} {quotechar}', 'AlgoMaps', Qgis.MessageLevel.Info)
+
+        #  Read the first 4 rows (to examine the columns and set the DQ parameters)
+        import pandas as pd
+        from .csv_utils import get_file_line_count
+
+        self.dockwidget.tableWidget_batch.clear()
+        self.dockwidget.tableWidget_batch.setColumnCount(0)
+        self.dockwidget.tableWidget_batch.setRowCount(0)
+        self.batch_combo_widgets = []
+
+        try:
+            df = pd.read_csv(csv_path, sep=sep, header=header_type, quotechar=quotechar, nrows=4, escapechar='\\',
+                             engine='python')
+        except:
+            return
+
+        # Add record count to UI
+        line_count = get_file_line_count(csv_path, header_type)
+        self.dockwidget.lbl_records.setText(f'Rekordów: {str(line_count)}')
+
+        # Add columns and rows
+        row_count, col_count = df.shape
+        [self.dockwidget.tableWidget_batch.insertColumn(0) for _ in range(col_count)]
+        [self.dockwidget.tableWidget_batch.insertRow(0) for _ in range(row_count + 1)]  # One more for comboBoxes
+        self.dockwidget.tableWidget_batch.setHorizontalHeaderLabels([str(col) for col in df.columns])
+
+        # Fill the table with DataFrame values
+        for i, row in enumerate(df.itertuples()):
+            for k in range(col_count):
+                self.dockwidget.tableWidget_batch.setItem(i + 1, k,
+                                                          QTableWidgetItem(str(row[k + 1])))  # k=0 is index
+
+        # Add column roles for DQ
+        for k in range(col_count):
+            new_role_combobox = QComboBox()
+            role_item_list = ['PRZEPISZ', 'POMIN',
+                              'ID_REKORDU',
+                              'DANE_OGOLNE',
+                              'KOD_POCZTOWY', 'MIEJSCOWOSC', 'ULICA_NUMER_DOMU_I_MIESZKANIA', 'ULICA', 'NUMER_DOMU',
+                              'NUMER_MIESZKANIA', 'NUMER_DOMU_I_MIESZKANIA', 'WOJEWODZTWO', 'POWIAT', 'GMINA'
+                              ]
+            new_role_combobox.insertItems(0, role_item_list)
+            new_role_combobox.insertSeparator(4)
+            new_role_combobox.insertSeparator(3)
+            new_role_combobox.insertSeparator(2)
+            self.batch_combo_widgets.append(new_role_combobox)
+            self.dockwidget.tableWidget_batch.setCellWidget(0, k, new_role_combobox)
+
+        # Show the table
+        self.dockwidget.tableWidget_batch.setVisible(True)
+        self.dockwidget.group_csv_info.setVisible(True)
+        self.dockwidget.group_batch.setVisible(True)

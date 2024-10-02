@@ -22,58 +22,71 @@ DEBUG_MODE = True  # Verbose messages
 TEMP_OUT_CSV = 'temp.csv'  # Ścieżka do pliku csv z wystandaryzowanymi i zgeokodowanymi adresami
 
 
-def _read_csv(csv_path):
-    import pandas as pd
-    import pandas.errors
-    from .csv_utils import identify_header, get_file_line_count
-
-    try:
-        header_type = identify_header(csv_path)
-    except:
-        QgsMessageLog.logMessage(f"IDENTIFY HEADER ERROR", 'AlgoMaps', Qgis.MessageLevel.Warning)
-        return None
-
-    # Open CSV file into pandas DataFrame
-
-    try:
-        df = pd.read_csv(csv_path, header=header_type, engine='python', sep=None)
-    except pandas.errors.ParserError as e:
-        try:
-            df = pd.read_csv(csv_path, header=header_type, engine='python', sep=None, escapechar='\\')
-        except pandas.errors.ParserError as e:
-            try:
-                df = pd.read_csv(csv_path, header=header_type, engine='python', sep=None, escapechar='\\', on_bad_lines='warn')
-            except:
-                QgsMessageLog.logMessage(f"READ DF ERROR", 'AlgoMaps', Qgis.MessageLevel.Warning)
-                return None
-    except:
-        QgsMessageLog.logMessage(f"ERROR", 'AlgoMaps', Qgis.MessageLevel.Warning)
-        # TODO message
-        return None
-
-    return df
+# def _read_csv(csv_path, header_type=None, sep=None, quotechar='"'):
+#     import pandas as pd
+#     import pandas.errors
+#     from .csv_utils import identify_header, get_file_line_count
+#
+#     # try:
+#     #     header_type = identify_header(csv_path)
+#     # except:
+#     #     QgsMessageLog.logMessage(f"IDENTIFY HEADER ERROR", 'AlgoMaps', Qgis.MessageLevel.Warning)
+#     #     return None
+#
+#     # Open CSV file into pandas DataFrame
+#
+#     try:
+#         df = pd.read_csv(csv_path, header=header_type, engine='python', sep=None)
+#     except pandas.errors.ParserError as e:
+#         try:
+#             df = pd.read_csv(csv_path, header=header_type, engine='python', sep=None, escapechar='\\')
+#         except pandas.errors.ParserError as e:
+#             try:
+#                 df = pd.read_csv(csv_path, header=header_type, engine='python', sep=None, escapechar='\\', on_bad_lines='warn')
+#                 QgsMessageLog.logMessage(f"CSV contains errors, skipped these lines", 'AlgoMaps', Qgis.MessageLevel.Warning)
+#             except:
+#                 QgsMessageLog.logMessage(f"READ CSV ERROR", 'AlgoMaps', Qgis.MessageLevel.Critical)
+#                 return None
+#     except:
+#         QgsMessageLog.logMessage(f"ERROR", 'AlgoMaps', Qgis.MessageLevel.Warning)
+#         return None
+#
+#     return df
 
 
 class BatchGeocoder(QgsTask):
-    def __init__(self, csv_path, column_roles, iface, dq_user, dq_token, dock_handle=None, save_csv_path=None, add_to_map=True):
+    def __init__(self, csv_path, column_roles, iface, dock_handle=None, qproj=None, dq_user='', dq_token='', 
+                 save_csv_path=None, header_type=None, add_to_map=True, sep=None, quote='"'):
         super().__init__("AlgoMaps batch geocoding", QgsTask.CanCancel)
         self.csv_path = csv_path
         self.column_roles = column_roles
+
+        # UI variables
         self.iface = iface
+        self.dock_handle = dock_handle
+        self.qproj = qproj
+
+        # DQ settings
         self.dq_user = dq_user
         self.dq_token = dq_token
-        self.dock_handle = dock_handle
-        self.report_dq = None
-        self.exception = None
-        self.job_name = 'ALGOMAPS QGIS test'
+        self.job_name = 'ALGOMAPS QGIS'
 
+        # CSV params
+        self.header_type = header_type
         self.save_csv_path = save_csv_path
+        self.quotechar = quote
+        self.sep = sep
+
+        # Other
         self.add_to_map = add_to_map
 
+        # Output placeholders
+        self.report_dq = None
+        self.exception = None
         self.df_results = None  # Output from DQ
 
         if self.dock_handle:
-            self.dock_handle.dockwidget.btn_cancel_batch.clicked.connect(self.cancel)
+            self.dock_handle.btn_cancel_batch.clicked.connect(self.cancel)
 
         if Qgis.versionInt() > 33800:
             from qgis.PyQt.QtCore import QMetaType
@@ -144,7 +157,7 @@ class BatchGeocoder(QgsTask):
 
         # Create layer if not exists
         vl = QgsVectorLayer("Point?crs=epsg:4326", layer_name, "memory")
-        self.dock_handle.qproj.addMapLayer(vl)
+        self.qproj.addMapLayer(vl)
 
         pr = vl.dataProvider()
 
@@ -185,19 +198,36 @@ class BatchGeocoder(QgsTask):
         dest_crs = qproj.crs()
         transform_context = qproj.transformContext()
 
-        xform = QgsCoordinateTransform(vl.crs(),
-                                       dest_crs,
-                                       transform_context)
+        xform = QgsCoordinateTransform(vl.crs(), dest_crs, transform_context)
         canvas.setExtent(xform.transform(vl.extent()))
         canvas.refresh()
 
     def run(self):
         import dq
         import csv
-
+        import pandas as pd
         QgsMessageLog.logMessage("SEND TO DQ...", 'AlgoMaps', level=Qgis.MessageLevel.Info)
 
-        df = _read_csv(self.csv_path)
+        # df = _read_csv(self.csv_path, self.header_type, self.sep, self.quotechar)
+
+        # Read the csv file
+        try:
+            df = pd.read_csv(self.csv_path, header=self.header_type, sep=self.sep, quotechar=self.quotechar,
+                             escapechar='\\', engine='python')
+        except pd.errors.ParserError as e:
+            try:
+                df = pd.read_csv(self.csv_path, header=self.header_type, sep=self.sep, engine='python',
+                                 quotechar=self.quotechar, escapechar='\\', on_bad_lines='warn')
+                QgsMessageLog.logMessage(f"CSV contains errors, skipped these lines", 'AlgoMaps',
+                                         Qgis.MessageLevel.Warning)
+            except:
+                QgsMessageLog.logMessage(f"READ CSV ERROR", 'AlgoMaps',
+                                         Qgis.MessageLevel.Critical)
+                return None
+        except Exception as e:
+            QgsMessageLog.logMessage(f"UNKNOWN ERROR: {e}", 'AlgoMaps',
+                                     Qgis.MessageLevel.Critical)
+            return None
 
         # DataFrame is empty
         if df is None:
@@ -284,7 +314,7 @@ class BatchGeocoder(QgsTask):
         if result:
             QgsMessageLog.logMessage("SUKCES.", 'AlgoMaps', Qgis.MessageLevel.Success)
             if self.dock_handle:
-                self.dock_handle.dockwidget.txt_output_batch.setText(str(self.report_dq))
+                self.dock_handle.txt_output_batch.setText(str(self.report_dq))
 
             if self.add_to_map:
                 self._add_to_map(self.df_results, self.job_name)  # TODO
@@ -293,21 +323,21 @@ class BatchGeocoder(QgsTask):
             if self.isCanceled():
                 QgsMessageLog.logMessage("CANCELED", 'AlgoMaps', Qgis.MessageLevel.Warning)
                 if self.dock_handle:
-                    self.dock_handle.dockwidget.txt_output_batch.setText('CANCELED')
+                    self.dock_handle.txt_output_batch.setText('CANCELED')
             elif self.exception is None:
                 QgsMessageLog.logMessage("ERROR", 'AlgoMaps', Qgis.MessageLevel.Warning)
                 if self.dock_handle:
-                    self.dock_handle.dockwidget.txt_output_batch.setText('ERROR UNKNOWN')
+                    self.dock_handle.txt_output_batch.setText('ERROR UNKNOWN')
             else:
                 QgsMessageLog.logMessage(f"Exception {self.exception}", 'AlgoMaps', Qgis.MessageLevel.Warning)
                 if self.dock_handle:
-                    self.dock_handle.dockwidget.txt_output_batch.setText(f'Exception: \n{self.exception}')
+                    self.dock_handle.txt_output_batch.setText(f'Exception: \n{self.exception}')
 
         if self.dock_handle:
-            self.dock_handle.dockwidget.progress_batch.setVisible(False)
-            self.dock_handle.dockwidget.btn_cancel_batch.setVisible(False)
-            self.dock_handle.dockwidget.btn_batch_process.setEnabled(True)
-            self.dock_handle.dockwidget.btn_batch_process.setText('Rozpocznij przetwarzanie')
+            self.dock_handle.progress_batch.setVisible(False)
+            self.dock_handle.btn_cancel_batch.setVisible(False)
+            self.dock_handle.btn_batch_process.setEnabled(True)
+            self.dock_handle.btn_batch_process.setText('Rozpocznij przetwarzanie')
 
     def cancel(self):
         QgsMessageLog.logMessage('Task was canceled', 'AlgoMaps', Qgis.Info)
