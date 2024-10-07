@@ -1,14 +1,9 @@
 import os
 import time
-import urllib.request
-import urllib.parse
-import json
 
 from qgis.core import (
     Qgis,
     QgsProject,
-    QgsGeometry,
-    QgsFeature,
     QgsTask,
     QgsMessageLog,
     QgsCoordinateTransform,
@@ -101,7 +96,7 @@ class BatchGeocoder(QgsTask):
             self._field_string_type = QVariant.String
             self._field_int_type = QVariant.Int
             self._field_long_type = QVariant.LongLong
-            self._field_short_type = QVariant.Short
+            self._field_short_type = QVariant.Int
             self._field_double_type = QVariant.Double
             self._field_bool_type = QVariant.Bool
 
@@ -115,7 +110,7 @@ class BatchGeocoder(QgsTask):
 
         job_config = JobConfig(job_name)
         job_config.module_std(address=1)
-        job_config.extend(gus=False, geocode=True, diagnostic=True, teryt=True, building_info=False)
+        job_config.extend(gus=False, geocode=True, diagnostic=True, teryt=True, building_info=False)#, area_characteristic=True)
 
         i = 0
         for column, role in fields.items():
@@ -127,10 +122,10 @@ class BatchGeocoder(QgsTask):
             i += 1
         return dq, job_config
 
-    def _dtype_to_qgis_type(self, dtype):
+    def _dtype_to_qt_type(self, dtype):
         import numpy as np
         # Mapping dictionary
-        dtype_to_pytype = {
+        dtype_to_qttype = {
             np.dtype('int64'): self._field_int_type,
             np.dtype('int32'): self._field_long_type,
             np.dtype('int16'): self._field_short_type,
@@ -142,7 +137,7 @@ class BatchGeocoder(QgsTask):
             np.dtype('bool'): self._field_bool_type
         }
         try:
-            return dtype_to_pytype[dtype]
+            return dtype_to_qttype[dtype]
         except KeyError:
             return self._field_string_type
         except:
@@ -150,10 +145,10 @@ class BatchGeocoder(QgsTask):
 
     def _add_to_map(self, df, job_name=''):
 
-        fields_definitions = [QgsField(x, self._dtype_to_qgis_type(t)) for x, t in df.dtypes.items()]
+        fields_definitions = [QgsField(x, self._dtype_to_qt_type(t)) for x, t in df.dtypes.items()]
 
         # Add dataframe to layer
-        layer_name = self.job_name
+        layer_name = job_name
 
         # Create layer if not exists
         vl = QgsVectorLayer("Point?crs=epsg:4326", layer_name, "memory")
@@ -203,24 +198,29 @@ class BatchGeocoder(QgsTask):
         canvas.refresh()
 
     def run(self):
-        import dq
         import csv
         import pandas as pd
-        QgsMessageLog.logMessage("SEND TO DQ...", 'AlgoMaps', level=Qgis.MessageLevel.Info)
+        if DEBUG_MODE:
+            QgsMessageLog.logMessage("READ CSV...", 'AlgoMaps', level=Qgis.MessageLevel.Info)
 
         # df = _read_csv(self.csv_path, self.header_type, self.sep, self.quotechar)
 
         # Read the csv file
+        df = None
         try:
             df = pd.read_csv(self.csv_path, header=self.header_type, sep=self.sep, quotechar=self.quotechar,
                              escapechar='\\', engine='python')
         except pd.errors.ParserError as e:
             try:
                 df = pd.read_csv(self.csv_path, header=self.header_type, sep=self.sep, engine='python',
-                                 quotechar=self.quotechar, escapechar='\\', on_bad_lines='warn')
-                QgsMessageLog.logMessage(f"CSV contains errors, skipped these lines", 'AlgoMaps',
+                                 quotechar=self.quotechar, escapechar='\\',
+                                 on_bad_lines='warn')  # TODO: function [partial(...)] instead of warn
+                QgsMessageLog.logMessage(f"CSV contains some errors, skipped these lines", 'AlgoMaps',
                                          Qgis.MessageLevel.Warning)
-            except:
+            except pd.errors.ParserWarning as e:
+                QgsMessageLog.logMessage(f"Skip line", 'AlgoMaps',
+                                         Qgis.MessageLevel.Warning)
+            except Exception:
                 QgsMessageLog.logMessage(f"READ CSV ERROR", 'AlgoMaps',
                                          Qgis.MessageLevel.Critical)
                 return None
@@ -229,11 +229,16 @@ class BatchGeocoder(QgsTask):
                                      Qgis.MessageLevel.Critical)
             return None
 
+        if self.isCanceled():
+            return False
+
         # DataFrame is empty
         if df is None:
             return False
 
-        #
+        # DataFrame processing
+        if DEBUG_MODE:
+            QgsMessageLog.logMessage("PROCESS DATAFRAME...", 'AlgoMaps', level=Qgis.MessageLevel.Info)
         col_names = list(df.columns)
         cols_dict = dict(zip(col_names, self.column_roles))
 
@@ -242,16 +247,24 @@ class BatchGeocoder(QgsTask):
         self.job_name = f'ALGOMAPS QGIS test {str(datetime.now())}'
         dq, job_config = self._prepare_dq_job(self.job_name, flags, cols_dict)
 
-        wejscie_dq = df.to_csv(None, sep=",", encoding="utf-8",
+        wejscie_dq = df.to_csv(None, sep=",", quotechar='"', encoding="utf-8",
                                quoting=csv.QUOTE_ALL, index=False)  # Jako string do importu w DQ-Client
 
+        if self.isCanceled():
+            return False
+
+        # Send to DQ
+        if DEBUG_MODE:
+            QgsMessageLog.logMessage("SEND TO DQ...", 'AlgoMaps', level=Qgis.MessageLevel.Info)
         try:
             job = dq.submit_job(job_config, input_data=wejscie_dq)
         except Exception as e:
             self.exception = e
             return False
 
-        QgsMessageLog.logMessage(f"Total elements in csv: {len(df)}", 'AlgoMaps', Qgis.MessageLevel.Info)
+        QgsMessageLog.logMessage(f"Total elements (correct records) in csv: {len(df)}",
+                                 tag='AlgoMaps',
+                                 level=Qgis.MessageLevel.Info)
 
         # Wait for batch results
         timeout = 3600   # 1 hr
@@ -272,10 +285,12 @@ class BatchGeocoder(QgsTask):
 
             elif state == 'FAILED':  # Brak środków na koncie / błąd
                 QgsMessageLog.logMessage(f'FAILED', 'AlgoMaps', Qgis.MessageLevel.Critical)
+                self.exception = 'DQ Status: FAILED'
                 return False
 
             if i > max_i:  # Proces trwa zbyt długo
                 QgsMessageLog.logMessage(f'TIMEOUT', 'AlgoMaps', Qgis.MessageLevel.Critical)
+                self.exception = 'DQ Timeout'
                 return False
 
             i += 1
@@ -283,6 +298,9 @@ class BatchGeocoder(QgsTask):
 
         # Job finished
         try:
+            if self.isCanceled():
+                return False
+
             report = dq.job_report(job.id)
             QgsMessageLog.logMessage(f'Report: {report.results}', 'AlgoMaps')
             if state == "FINISHED_PAID":
@@ -291,6 +309,9 @@ class BatchGeocoder(QgsTask):
                 dq.job_results(job.id, TEMP_OUT_CSV)
                 self.report_dq = report.results
             else:
+                return False
+
+            if self.isCanceled():
                 return False
 
             import pandas as pd
