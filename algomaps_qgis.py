@@ -53,7 +53,7 @@ def find_python():
     if sys.platform != "win32":
         return sys.executable
 
-    for path in sys.path:
+    for path in sys.path:  # TODO: check correctness
         assumed_path = os.path.join(path, "python.exe")
         if os.path.isfile(assumed_path):
             return assumed_path
@@ -64,6 +64,7 @@ def find_python():
 def install_pip(module_name, upgrade=False):
     import subprocess
 
+    QgsMessageLog.logMessage(f'Install {module_name}', 'AlgoMaps', level=Qgis.MessageLevel.Info)
     arg_list = [find_python(), '-m', 'pip', 'install', module_name]
     if upgrade:
         arg_list.insert(4, '--upgrade')
@@ -71,9 +72,33 @@ def install_pip(module_name, upgrade=False):
     result = subprocess.run(arg_list,
                             stdout=subprocess.PIPE,
                             stderr=subprocess.STDOUT)
-    QgsMessageLog.logMessage(f'Install {module_name}', level=Qgis.MessageLevel.Info)
-    QgsMessageLog.logMessage(f'Return code: {result.returncode}', level=Qgis.MessageLevel.Info)
-    QgsMessageLog.logMessage(f'Stdout: {result.stdout.decode(encoding="utf-8")}', level=Qgis.MessageLevel.Info)
+
+    if result.returncode == 1:
+        if 'no module named pip' in result.stdout.decode(encoding="utf-8").lower():
+            QgsMessageLog.logMessage(f'Trying to install pip...',
+                                     'AlgoMaps',
+                                     level=Qgis.MessageLevel.Info)
+            # Install pip
+            wget_res = subprocess.run(['wget', 'https://bootstrap.pypa.io/get-pip.py'])
+            pip_res = subprocess.run([find_python(), 'get-pip.py'])
+
+            # Retry module install
+            if wget_res.returncode == 0 and pip_res.returncode == 0:
+                subprocess.run(['rm', 'get-pip.py'])
+                install_pip(module_name, upgrade)
+            else:
+                QgsMessageLog.logMessage(f'Could not use pip to install modules. Batch will not work!',
+                                         'AlgoMaps',
+                                         level=Qgis.MessageLevel.Critical)
+
+    return_code = result.returncode
+    QgsMessageLog.logMessage(f'Return code: {return_code}', 'AlgoMaps', level=Qgis.MessageLevel.Info)
+
+    if return_code != 0:
+        QgsMessageLog.logMessage(f'Stdout: {result.stdout.decode(encoding="utf-8")}', 'AlgoMaps',
+                                 level=Qgis.MessageLevel.Warning)
+
+    return return_code
 
 
 class AlgoMapsPlugin:
@@ -267,29 +292,30 @@ class AlgoMapsPlugin:
             import pandas as pd
         except ModuleNotFoundError as e:
 
-            self.iface.messageBar().pushMessage(self.tr(u'AlgoMaps'),
-                                                self.tr(
-                                                    u'Cannot import `pandas` module. Installing... (QGIS window may freeze)'),
-                                                level=Qgis.MessageLevel.Warning)
-
             QgsMessageLog.logMessage('Installing pandas...', level=Qgis.MessageLevel.Info)
-            install_pip('pandas', upgrade=False)
+            ret_code = install_pip('pandas', upgrade=False)
+            if ret_code == 0:
+                self.iface.messageBar().pushMessage(self.tr(u'AlgoMaps'),
+                                                    self.tr(
+                                                        u'New module `pandas` installed. Restart QGIS to use AlgoMaps plugin'),
+                                                    level=Qgis.MessageLevel.Warning)
 
         # Check dq-client import
         try:
             import dq
 
         except ModuleNotFoundError as e:
-            self.iface.messageBar().pushMessage(self.tr(u'AlgoMaps'),
-                                                self.tr(
-                                                    u'Cannot import `dq-client` module. Installing... (QGIS window may freeze)'),
-                                                level=Qgis.MessageLevel.Warning)
 
-            import subprocess
             QgsMessageLog.logMessage('Installing dq-client...', level=Qgis.MessageLevel.Info)
-            install_pip('dq-client', upgrade=False)
+            ret_code_dq = install_pip('dq-client', upgrade=False)
             QgsMessageLog.logMessage('Installing requests...', level=Qgis.MessageLevel.Info)
-            install_pip('requests', upgrade=True)
+            ret_code_r = install_pip('requests', upgrade=True)
+
+            if ret_code_dq == 0 and ret_code_r == 0:
+                self.iface.messageBar().pushMessage(self.tr(u'AlgoMaps'),
+                                                    self.tr(
+                                                        u'New module `dq-client` installed. Restart QGIS to use AlgoMaps plugin'),
+                                                    level=Qgis.MessageLevel.Warning)
 
     def onClosePlugin(self):
         """Cleanup necessary items here when plugin dockwidget is closed"""
@@ -808,7 +834,7 @@ class AlgoMapsPlugin:
         self.dockwidget.btn_cancel_batch.setVisible(True)
         self.dockwidget.btn_batch_process.setEnabled(False)
         self.dockwidget.btn_batch_process.setText('Przetwarzanie...')
-        self.dockwidget.txt_output_batch.setText('Przetwarzanie zadania może zająć nawet kilkanaście minut')
+        self.dockwidget.txt_output_batch.setText('Przetwarzanie zadania może zająć od kilku do nawet kilkudziesięciu minut')
 
     def file_batch_save_changed(self):
         self.csv_path_output = self.dockwidget.file_batch_save.filePath()
