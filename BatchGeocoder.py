@@ -10,9 +10,13 @@ from qgis.core import (
     QgsField, QgsFeature, QgsVectorLayer,
     QgsGeometry, QgsPointXY
     )
+from qgis.gui import QgisInterface
 
 from qgis.gui import QgsMessageBar
 from qgis.PyQt.QtCore import QObject, pyqtSignal
+
+from .algomaps_qgis_dockwidget import AlgoMapsPluginDockWidget
+
 DEBUG_MODE = True  # Verbose messages
 TEMP_OUT_CSV = 'temp.csv'  # Ścieżka do pliku csv z wystandaryzowanymi i zgeokodowanymi adresami
 
@@ -50,9 +54,12 @@ TEMP_OUT_CSV = 'temp.csv'  # Ścieżka do pliku csv z wystandaryzowanymi i zgeok
 
 
 class BatchGeocoder(QgsTask):
-    def __init__(self, csv_path, column_roles, iface, dock_handle=None, qproj=None, dq_user='', dq_token='', 
-                 save_csv_path=None, header_type=None, add_to_map=True, sep=None, quote='"'):
+    def __init__(self, csv_path: str, column_roles: list, iface: QgisInterface,
+                 dock_handle: AlgoMapsPluginDockWidget = None, qproj: QgsProject = None, dq_user: str = '',
+                 dq_token: str = '', flags: dict = None, save_csv_path: str | None = None,
+                 header_type: str | None = None, add_to_map: bool = True, sep: str = None, quote: str = '"'):
         super().__init__("AlgoMaps batch geocoding", QgsTask.CanCancel)
+
         self.csv_path = csv_path
         self.column_roles = column_roles
 
@@ -65,6 +72,7 @@ class BatchGeocoder(QgsTask):
         self.dq_user = dq_user
         self.dq_token = dq_token
         self.job_name = 'ALGOMAPS QGIS'
+        self.flags = flags if flags else {}
 
         # CSV params
         self.header_type = header_type
@@ -110,7 +118,11 @@ class BatchGeocoder(QgsTask):
 
         job_config = JobConfig(job_name)
         job_config.module_std(address=1)
-        job_config.extend(gus=False, geocode=True, diagnostic=True, teryt=True, building_info=False)#, area_characteristic=True)
+        job_config.extend(geocode=True,
+                          diagnostic=True,
+                          gus=flags.get('gus', False),
+                          teryt=flags.get('teryt', False),
+                          building_info=flags.get('buildinfo', False))#, area_characteristic=True)
 
         i = 0
         for column, role in fields.items():
@@ -126,8 +138,8 @@ class BatchGeocoder(QgsTask):
         import numpy as np
         # Mapping dictionary
         dtype_to_qttype = {
-            np.dtype('int64'): self._field_int_type,
-            np.dtype('int32'): self._field_long_type,
+            np.dtype('int64'): self._field_long_type,
+            np.dtype('int32'): self._field_int_type,
             np.dtype('int16'): self._field_short_type,
             np.dtype('float64'): self._field_double_type,
             np.dtype('float32'): self._field_double_type,
@@ -234,6 +246,7 @@ class BatchGeocoder(QgsTask):
 
         # DataFrame is empty
         if df is None:
+            self.exception = 'Error while opening CSV file'
             return False
 
         # DataFrame processing
@@ -242,10 +255,9 @@ class BatchGeocoder(QgsTask):
         col_names = list(df.columns)
         cols_dict = dict(zip(col_names, self.column_roles))
 
-        flags = [True, False, False, False]  # TODO: from checkbox
         from datetime import datetime
         self.job_name = f'ALGOMAPS QGIS test {str(datetime.now())}'
-        dq, job_config = self._prepare_dq_job(self.job_name, flags, cols_dict)
+        dq, job_config = self._prepare_dq_job(self.job_name, self.flags, cols_dict)
 
         wejscie_dq = df.to_csv(None, sep=",", quotechar='"', encoding="utf-8",
                                quoting=csv.QUOTE_ALL, index=False)  # Jako string do importu w DQ-Client
@@ -302,13 +314,16 @@ class BatchGeocoder(QgsTask):
                 return False
 
             report = dq.job_report(job.id)
-            QgsMessageLog.logMessage(f'Report: {report.results}', 'AlgoMaps')
+            if DEBUG_MODE:
+                QgsMessageLog.logMessage(f'Report: {report.results}', 'AlgoMaps')
+
             if state == "FINISHED_PAID":
                 QgsMessageLog.logMessage(f'Qualiy issues: {report.quality_issues}', 'AlgoMaps')
                 QgsMessageLog.logMessage("Eksportuję zgeokodowane dane...", 'AlgoMaps')
                 dq.job_results(job.id, TEMP_OUT_CSV)
-                self.report_dq = report.results
+                self.report_dq = report
             else:
+                # TODO: retry
                 return False
 
             if self.isCanceled():
@@ -335,7 +350,11 @@ class BatchGeocoder(QgsTask):
         if result:
             QgsMessageLog.logMessage("SUKCES.", 'AlgoMaps', Qgis.MessageLevel.Success)
             if self.dock_handle:
-                self.dock_handle.txt_output_batch.setText(str(self.report_dq))
+                import json
+                job_report_str = str(self.report_dq).replace("'", '"')
+                job_report_json = json.loads(job_report_str)
+                self.dock_handle.txt_output_batch.setText(
+                    json.dumps(job_report_json, indent=4, ensure_ascii=False).encode('utf8').decode())
 
             if self.add_to_map:
                 self._add_to_map(self.df_results, self.job_name)  # TODO
@@ -344,7 +363,7 @@ class BatchGeocoder(QgsTask):
             if self.isCanceled():
                 QgsMessageLog.logMessage("CANCELED", 'AlgoMaps', Qgis.MessageLevel.Warning)
                 if self.dock_handle:
-                    self.dock_handle.txt_output_batch.setText('CANCELED')
+                    self.dock_handle.txt_output_batch.setText('Zatrzymano przetwarzanie')
             elif self.exception is None:
                 QgsMessageLog.logMessage("ERROR", 'AlgoMaps', Qgis.MessageLevel.Warning)
                 if self.dock_handle:

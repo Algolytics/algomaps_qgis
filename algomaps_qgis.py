@@ -120,6 +120,7 @@ class AlgoMapsPlugin:
         self.include_teryt = None
         self.include_buildinfo = None
         self.include_financial = None
+        self.flags = {}
         self.iface = iface
         self.canvas = self.iface.mapCanvas()
         self.batch_combo_widgets = []  # List of column-role comboBoxes for Batch processing
@@ -470,7 +471,7 @@ class AlgoMapsPlugin:
             return
 
         self.dockwidget.txt_outputstand.setText(
-            json.dumps(result_json, indent=2, ensure_ascii=False).encode('utf8').decode())
+            json.dumps(result_json, indent=4, ensure_ascii=False).encode('utf8').decode())
 
         if 'latitude' in result_json and 'longitude' in result_json:
             self.add_response_to_map(result_json, dane_ogolne, self.include_teryt,
@@ -515,7 +516,7 @@ class AlgoMapsPlugin:
             return
 
         self.dockwidget.txt_outputstand.setText(
-            json.dumps(result_json, indent=2, ensure_ascii=False).encode('utf8').decode())
+            json.dumps(result_json, indent=4, ensure_ascii=False).encode('utf8').decode())
 
         if 'latitude' in result_json and 'longitude' in result_json:
             input_text = f'{w}|{p}|{g}|{m}|{k}|{u}|{n}|{l}'
@@ -745,6 +746,14 @@ class AlgoMapsPlugin:
                                        level=Qgis.MessageLevel.Info)
             QgsMessageLog().logMessage(include_txt, 'AlgoMaps', level=Qgis.MessageLevel.Info)
 
+        self.flags = {
+            'gus': self.include_gus,
+            'teryt': self.include_teryt,
+            'buildinfo': self.include_buildinfo,
+            'financial': self.include_financial
+        }
+
+    @staticmethod
     def _parse_statuses(self, status):
 
         # Split status into three separate strings (match, geocode, others)
@@ -810,11 +819,13 @@ class AlgoMapsPlugin:
 
         try:
             from .BatchGeocoder import BatchGeocoder
-        except:
+        except Exception as e:
             self.iface.messageBar().pushMessage(self.tr(u'AlgoMaps'),
                                                 self.tr(
-                                                    u'Cannot initialize batch processing - error in code. Call the devs!'),
+                                                    u'Cannot initialize batch processing - error in code. Contact the AlgoMaps developers'),
                                                 level=Qgis.MessageLevel.Critical)
+            if DEBUG_MODE:
+                QgsMessageLog.logMessage(str(e), 'AlgoMaps', Qgis.MessageLevel.Warning)
             return
 
         geocoder = BatchGeocoder(csv_path=self.csv_path,
@@ -824,6 +835,7 @@ class AlgoMapsPlugin:
                                  qproj=self.qproj,
                                  dq_user=self.dq_user,
                                  dq_token=self.dq_token,
+                                 flags=self.flags,
                                  add_to_map=self.dockwidget.chk_add_map.isChecked(),
                                  save_csv_path=self.csv_path_output,
                                  header_type=self.batch_header_type,
