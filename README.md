@@ -41,9 +41,8 @@ Pojedynczy adres:
 8. Po przekierowaniu na stronę profilu użytkownika (https://developer.algolytics.pl/profile) odszukaj utworzoną właśnie
    subskrybcję w polu "Subscriptions".
 9. Wyświetl klucz API (primary lub secondary) naciskając "Show".
-10. Skopiuj klucz (32-znakowy ciąg znaków i liczb).
-11. Powróć do QGIS i wklej klucz do pola "DQ token" w Ustawieniach wtyczki AlgoMaps.
-12. W polu "DQ user" wpisz adres email swojego konta.
+10.	Skopiuj klucz (32-znakowy ciąg znaków i liczb).
+11.	Powróć do QGIS i wklej klucz w pole "API key" w Ustawieniach wtyczki AlgoMaps.
 
 Przetwarzanie wsadowe (batch):
 
@@ -52,12 +51,12 @@ Przetwarzanie wsadowe (batch):
 3. Wypełnij swoje dane, zakceptuj regulamin i potwierdź "Nie jestem robotem". Kliknij "Utwórz konto".
 4. Kliknij w link aktywacyjny w twojej skrzynce pocztowej (jeśli nie widzisz wiadomości sprawdź folder Spam).
 5. Zaloguj się na swoje konto.
-6. W prawym górnym rogu naciśnij przycisk z twoim adresem email.
-7. Wybierz "Moje konto" z listy.
-8. Pierwsze 1000 rekordów w miesiącu jest darmowe??????. Aby zwiększyć limit należy uzupełnić dane kontaktowe i
-   doładować konto.
-9. Skopiuj "Klucz dostępu do API".
-10. Powróć do QGIS i wklej klucz w pole "API key" w Ustawieniach wtyczki AlgoMaps.
+6. Wybierz "Moje konto" z listy.
+7. Pierwszy 1000 przetwarzanych rekordów jest darmowy. Aby zwiększyć limit należy uzupełnić dane kontaktowe i doładować
+   konto.
+8. Skopiuj "Klucz dostępu do API".
+9. Powróć do QGIS i wklej klucz do pola "DQ token" w Ustawieniach wtyczki AlgoMaps.
+10.	W polu "DQ user" wpisz adres email swojego konta.
 
 ### Dziennik zmian
 
@@ -118,7 +117,7 @@ Batch processing:
 8. The first 1000 records per month are free. To increase the limit, complete your contact information and top up your
    account.
 9. Copy the "API access key".
-10. Return to QGIS and paste
+10. Return to QGIS and paste the access key into the "API key" field.
 
 ### Changelog
 
