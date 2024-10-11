@@ -21,7 +21,6 @@
  *                                                                         *
  ***************************************************************************/
 """
-import requests
 from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication, Qt
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction, QTableWidgetItem, QComboBox
@@ -41,12 +40,65 @@ from .resources import *
 
 # Import the code for the DockWidget
 from .algomaps_qgis_dockwidget import AlgoMapsPluginDockWidget
-import os.path
+import os
+import sys
 
 import json
 
 CONFIG_PATH = 'dq_config.json'
 DEBUG_MODE = True  # Verbose messages
+
+
+def find_python():
+    if sys.platform != "win32":
+        return sys.executable
+
+    for path in sys.path:  # TODO: check correctness
+        assumed_path = os.path.join(path, "python.exe")
+        if os.path.isfile(assumed_path):
+            return assumed_path
+
+    return None
+
+
+def install_pip(module_name, upgrade=False):
+    import subprocess
+
+    QgsMessageLog.logMessage(f'Install {module_name}', 'AlgoMaps', level=Qgis.MessageLevel.Info)
+    arg_list = [find_python(), '-m', 'pip', 'install', module_name]
+    if upgrade:
+        arg_list.insert(4, '--upgrade')
+
+    result = subprocess.run(arg_list,
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT)
+
+    if result.returncode == 1:
+        if 'no module named pip' in result.stdout.decode(encoding="utf-8").lower():
+            QgsMessageLog.logMessage(f'Trying to install pip...',
+                                     'AlgoMaps',
+                                     level=Qgis.MessageLevel.Info)
+            # Install pip
+            wget_res = subprocess.run(['wget', 'https://bootstrap.pypa.io/get-pip.py'])
+            pip_res = subprocess.run([find_python(), 'get-pip.py'])
+
+            # Retry module install
+            if wget_res.returncode == 0 and pip_res.returncode == 0:
+                subprocess.run(['rm', 'get-pip.py'])
+                install_pip(module_name, upgrade)
+            else:
+                QgsMessageLog.logMessage(f'Could not use pip to install modules. Batch will not work!',
+                                         'AlgoMaps',
+                                         level=Qgis.MessageLevel.Critical)
+
+    return_code = result.returncode
+    QgsMessageLog.logMessage(f'Return code: {return_code}', 'AlgoMaps', level=Qgis.MessageLevel.Info)
+
+    if return_code != 0:
+        QgsMessageLog.logMessage(f'Stdout: {result.stdout.decode(encoding="utf-8")}', 'AlgoMaps',
+                                 level=Qgis.MessageLevel.Warning)
+
+    return return_code
 
 
 class AlgoMapsPlugin:
@@ -61,14 +113,19 @@ class AlgoMapsPlugin:
         :type iface: QgsInterface
         """
         # Save reference to the QGIS interface
+        self.batch_header_type = None
+        self.batch_quote = None
+        self.batch_sep = None
         self.include_gus = None
         self.include_teryt = None
         self.include_buildinfo = None
         self.include_financial = None
+        self.flags = {}
         self.iface = iface
         self.canvas = self.iface.mapCanvas()
         self.batch_combo_widgets = []  # List of column-role comboBoxes for Batch processing
         self.csv_path = None
+        self.csv_path_output = None
         self.taskManager = QgsApplication.taskManager()
 
         # Initialize plugin directory
@@ -90,7 +147,7 @@ class AlgoMapsPlugin:
         # Declare instance attributes
         self.actions = []
         self.menu = self.tr(u'&AlgoMaps')
-        
+
         # TODO: We are going to let the user set this up in a future iteration
         self.toolbar = self.iface.addToolBar(u'AlgoMapsPlugin')
         self.toolbar.setObjectName(u'AlgoMapsPlugin')
@@ -146,18 +203,17 @@ class AlgoMapsPlugin:
         # noinspection PyTypeChecker,PyArgumentList,PyCallByClass
         return QCoreApplication.translate('AlgoMapsPlugin', message)
 
-
     def add_action(
-        self,
-        icon_path,
-        text,
-        callback,
-        enabled_flag=True,
-        add_to_menu=True,
-        add_to_toolbar=True,
-        status_tip=None,
-        whats_this=None,
-        parent=None):
+            self,
+            icon_path,
+            text,
+            callback,
+            enabled_flag=True,
+            add_to_menu=True,
+            add_to_toolbar=True,
+            status_tip=None,
+            whats_this=None,
+            parent=None):
         """Add a toolbar icon to the toolbar.
 
         :param icon_path: Path to the icon for this action. Can be a resource
@@ -232,6 +288,36 @@ class AlgoMapsPlugin:
 
         self.qproj = QgsProject.instance()
 
+        # Check pandas import
+        try:
+            import pandas as pd
+        except ModuleNotFoundError as e:
+
+            QgsMessageLog.logMessage('Installing pandas...', level=Qgis.MessageLevel.Info)
+            ret_code = install_pip('pandas', upgrade=False)
+            if ret_code == 0:
+                self.iface.messageBar().pushMessage(self.tr(u'AlgoMaps'),
+                                                    self.tr(
+                                                        u'New module `pandas` installed. Restart QGIS to use AlgoMaps plugin'),
+                                                    level=Qgis.MessageLevel.Warning)
+
+        # Check dq-client import
+        try:
+            import dq
+
+        except ModuleNotFoundError as e:
+
+            QgsMessageLog.logMessage('Installing dq-client...', level=Qgis.MessageLevel.Info)
+            ret_code_dq = install_pip('dq-client', upgrade=False)
+            QgsMessageLog.logMessage('Installing requests...', level=Qgis.MessageLevel.Info)
+            ret_code_r = install_pip('requests', upgrade=True)
+
+            if ret_code_dq == 0 and ret_code_r == 0:
+                self.iface.messageBar().pushMessage(self.tr(u'AlgoMaps'),
+                                                    self.tr(
+                                                        u'New module `dq-client` installed. Restart QGIS to use AlgoMaps plugin'),
+                                                    level=Qgis.MessageLevel.Warning)
+
     def onClosePlugin(self):
         """Cleanup necessary items here when plugin dockwidget is closed"""
 
@@ -246,7 +332,6 @@ class AlgoMapsPlugin:
 
         self.pluginIsActive = False
 
-
     def unload(self):
         """Removes the plugin menu item and icon from QGIS GUI."""
         for action in self.actions:
@@ -256,7 +341,6 @@ class AlgoMapsPlugin:
             self.iface.removeToolBarIcon(action)
         # Remove the toolbar
         del self.toolbar
-
 
     def run(self):
         """Run method that loads and starts the plugin"""
@@ -285,19 +369,23 @@ class AlgoMapsPlugin:
                 self.dockwidget.btn_geocode_details.clicked.connect(self.clicked_geocode_details)
 
                 self.dockwidget.btn_batch_process.clicked.connect(self.clicked_batch_process)
-                
+
                 # Conenct settings checkboxes
                 self.dockwidget.chk_teryt.stateChanged.connect(self.settings_chkbox_changed)
                 self.dockwidget.chk_gus.stateChanged.connect(self.settings_chkbox_changed)
                 self.dockwidget.chk_buildinfo.stateChanged.connect(self.settings_chkbox_changed)
                 self.dockwidget.chk_financial.stateChanged.connect(self.settings_chkbox_changed)
 
-                #
+                # Batch UI
                 self.dockwidget.progress_batch.setVisible(False)
+                self.dockwidget.btn_cancel_batch.setVisible(False)
                 self.dockwidget.tableWidget_batch.setVisible(False)
-                self.dockwidget.lbl_records.setVisible(False)
+                self.dockwidget.group_csv_info.setVisible(False)
                 self.dockwidget.group_batch.setVisible(False)
                 self.dockwidget.file_batch_load.fileChanged.connect(self.file_batch_load_changed)
+                self.dockwidget.file_batch_save.fileChanged.connect(self.file_batch_save_changed)
+                self.dockwidget.txt_sep.textEdited.connect(self.txt_sep_changed)
+                self.dockwidget.txt_quotechar.textEdited.connect(self.txt_quotechar_changed)
 
             # connect to provide cleanup on closing of dockwidget
             self.dockwidget.closingPlugin.connect(self.onClosePlugin)
@@ -382,7 +470,8 @@ class AlgoMapsPlugin:
         if result_json is None:
             return
 
-        self.dockwidget.txt_outputstand.setText(json.dumps(result_json, indent=2, ensure_ascii=False).encode('utf8').decode())
+        self.dockwidget.txt_outputstand.setText(
+            json.dumps(result_json, indent=4, ensure_ascii=False).encode('utf8').decode())
 
         if 'latitude' in result_json and 'longitude' in result_json:
             self.add_response_to_map(result_json, dane_ogolne, self.include_teryt,
@@ -422,11 +511,12 @@ class AlgoMapsPlugin:
                                                         self.include_gus,
                                                         self.include_buildinfo,
                                                         self.include_financial)
-        
+
         if result_json is None:  # Error
             return
 
-        self.dockwidget.txt_outputstand.setText(json.dumps(result_json, indent=2, ensure_ascii=False).encode('utf8').decode())
+        self.dockwidget.txt_outputstand.setText(
+            json.dumps(result_json, indent=4, ensure_ascii=False).encode('utf8').decode())
 
         if 'latitude' in result_json and 'longitude' in result_json:
             input_text = f'{w}|{p}|{g}|{m}|{k}|{u}|{n}|{l}'
@@ -436,8 +526,10 @@ class AlgoMapsPlugin:
             self.iface.messageBar().pushMessage(self.tr(u'AlgoMaps'),
                                                 self.tr(u'Brak geokodowania dla podanego adresu'),
                                                 level=Qgis.MessageLevel.Warning)
-    
+
     def send_single_algomaps_request(self, req_data, teryt=False, gus=False, buildinfo=False, financial=False):
+        import requests
+
         active_modules = ["ADDRESSES"] if not financial else ["ADDRESSES", "FINANCES"]
         gus = gus if not financial else True  # If using financial data, we need GUS identifiers
         input_json = {
@@ -471,7 +563,8 @@ class AlgoMapsPlugin:
                                                 level=Qgis.MessageLevel.Critical)
             return None
 
-    def add_response_to_map(self, result_json, input_data=None, teryt=False, gus=False, buildinfo=False, financial=False):
+    def add_response_to_map(self, result_json, input_data=None, teryt=False, gus=False, buildinfo=False,
+                            financial=False):
         default_fields_names = ["inputData", "voivodeshipName", "countyName", "communeName", "postalCode",
                                 "cityName", "cityDistrictName", "streetAttribute", "streetName",
                                 "streetNameMajorPart", "streetNameMinorPart", "streetNumber", "apartmentNumber",
@@ -514,7 +607,8 @@ class AlgoMapsPlugin:
             additional_fields.append(self._define_field("streetSymbol", self._field_string_type, result_json))
 
         if gus:
-            additional_fields.append(self._define_field("statisticalRegionSymbol", self._field_string_type, result_json))
+            additional_fields.append(
+                self._define_field("statisticalRegionSymbol", self._field_string_type, result_json))
             additional_fields.append(self._define_field("censusCircuitSymbol", self._field_string_type, result_json))
 
         if buildinfo:
@@ -555,7 +649,8 @@ class AlgoMapsPlugin:
                 additional_fields.append(self._define_field(field, self._field_double_type, result_json))
 
         additional_values = dict([[x[0], x[2]] for x in additional_fields])  # Field-value map
-        additional_definitions = [QgsField(x[0], x[1]) for x in additional_fields]  # Field definitions for data provider
+        additional_definitions = [QgsField(x[0], x[1]) for x in
+                                  additional_fields]  # Field definitions for data provider
 
         # Add to map
         layer_name = "AlgoMaps standaryzacja i geokodowanie"
@@ -631,7 +726,7 @@ class AlgoMapsPlugin:
         # Center map at the point
         self.canvas.setExtent(transformed_rect)
         self.canvas.refresh()
-        
+
     def settings_chkbox_changed(self, i):
         self.include_teryt = True if self.dockwidget.chk_teryt.isChecked() else False
         self.include_gus = True if self.dockwidget.chk_gus.isChecked() else False
@@ -651,6 +746,14 @@ class AlgoMapsPlugin:
                                        level=Qgis.MessageLevel.Info)
             QgsMessageLog().logMessage(include_txt, 'AlgoMaps', level=Qgis.MessageLevel.Info)
 
+        self.flags = {
+            'gus': self.include_gus,
+            'teryt': self.include_teryt,
+            'buildinfo': self.include_buildinfo,
+            'financial': self.include_financial
+        }
+
+    @staticmethod
     def _parse_statuses(self, status):
 
         # Split status into three separate strings (match, geocode, others)
@@ -676,83 +779,29 @@ class AlgoMapsPlugin:
         return status_dop, status_geo, status_other
 
     def file_batch_load_changed(self):
+        from .csv_utils import identify_header, identify_delimiter_and_quotechar
+
         if DEBUG_MODE:
             QgsMessageLog.logMessage('BATCH FILE PATH CHANGED', 'AlgoMaps', Qgis.MessageLevel.Info)
-
-        # Check pandas import
-        try:
-            import pandas as pd
-        except ModuleNotFoundError as e:
-            self.iface.messageBar().pushMessage(self.tr(u'AlgoMaps'),
-                                                self.tr(
-                                                    u'Cannot import `pandas` module. Please install it - see README.md for instructions.'),
-                                                level=Qgis.MessageLevel.Critical)
-            return
-
-        def identify_header(path, n=5, th=0.9):
-            df1 = pd.read_csv(path, sep=None, header='infer', nrows=n, on_bad_lines='warn', engine='python',
-                              escapechar='\\')
-            df2 = pd.read_csv(path, sep=None, header=None, nrows=n, on_bad_lines='warn', engine='python',
-                              escapechar='\\')
-            sim = (df1.dtypes.values == df2.dtypes.values).mean()  # Boolean mask array mean
-            return 'infer' if sim < th else None
-
-        def get_file_line_count(path, header=None):
-            with open(path, 'rb') as file:
-                for count, _ in enumerate(file):
-                    pass
-            count = count if header else count+1
-            return count
 
         try:
             self.csv_path = self.dockwidget.file_batch_load.filePath()
 
-            self.dockwidget.tableWidget_batch.clear()
-            self.dockwidget.tableWidget_batch.setColumnCount(0)
-            self.dockwidget.tableWidget_batch.setRowCount(0)
-
             if not self.csv_path:  # Empty fileWidget path
                 return
 
-            # Read the first 5 rows (to examine the columns and set the DQ parameters)
-            header_type = identify_header(self.csv_path)
-            df = pd.read_csv(self.csv_path, sep=None, header=header_type, nrows=4, escapechar='\\', engine='python')
+            # Infer the csv separator and quoting char
+            sep, quotechar = identify_delimiter_and_quotechar(self.csv_path)
+            if DEBUG_MODE:
+                QgsMessageLog.logMessage(f'Separator: {sep} / Quotechar: {quotechar}', 'AlgoMaps', Qgis.MessageLevel.Info)
 
-            # Add record count to UI
-            line_count = get_file_line_count(self.csv_path, header_type)
-            self.dockwidget.lbl_records.setText(f'Linii: {str(line_count)}')
+            self.batch_sep = str(sep)
+            self.batch_quote = str(quotechar)
+            self.batch_header_type = identify_header(self.csv_path, sep=sep)
+            self.dockwidget.txt_sep.setText(str(sep))
+            self.dockwidget.txt_quotechar.setText(str(quotechar))
 
-            # Add columns and rows
-            row_count, col_count = df.shape
-            [self.dockwidget.tableWidget_batch.insertColumn(0) for _ in range(col_count)]
-            [self.dockwidget.tableWidget_batch.insertRow(0) for _ in range(row_count+1)]  # One more for comboBoxes
-            self.dockwidget.tableWidget_batch.setHorizontalHeaderLabels([str(col) for col in df.columns])
-
-            # Fill the table with DataFrame values
-            for i, row in enumerate(df.itertuples()):
-                for k in range(col_count):
-                    self.dockwidget.tableWidget_batch.setItem(i+1, k, QTableWidgetItem(str(row[k+1])))  # k=0 is index
-
-            # Add column roles for DQ
-            for k in range(col_count):
-                new_role_combobox = QComboBox()
-                role_item_list = ['PRZEPISZ', 'POMIN',
-                                'ID_REKORDU',
-                                'DANE_OGOLNE',
-                                'KOD_POCZTOWY', 'MIEJSCOWOSC', 'ULICA_NUMER_DOMU_I_MIESZKANIA', 'ULICA', 'NUMER_DOMU',
-                                'NUMER_MIESZKANIA', 'NUMER_DOMU_I_MIESZKANIA', 'WOJEWODZTWO', 'POWIAT', 'GMINA'
-                                ]
-                new_role_combobox.insertItems(0, role_item_list)
-                new_role_combobox.insertSeparator(4)
-                new_role_combobox.insertSeparator(3)
-                new_role_combobox.insertSeparator(2)
-                self.batch_combo_widgets.append(new_role_combobox)
-                self.dockwidget.tableWidget_batch.setCellWidget(0, k, new_role_combobox)
-
-            # Show the table
-            self.dockwidget.tableWidget_batch.setVisible(True)
-            self.dockwidget.lbl_records.setVisible(True)
-            self.dockwidget.group_batch.setVisible(True)
+            self.show_csv_table(self.csv_path, sep=self.batch_sep, header_type=self.batch_header_type, quotechar=self.batch_quote)
 
         except Exception as e:
             raise
@@ -760,23 +809,127 @@ class AlgoMapsPlugin:
             # pass
 
     def clicked_batch_process(self):
+        column_roles = [cb.currentText() for cb in self.batch_combo_widgets]
+        # TODO: check roles
+        # TODO: check if save as csv and filepath not empty
+
         if DEBUG_MODE:
             QgsMessageLog.logMessage('CLICKED PROCESS', 'AlgoMaps', Qgis.MessageLevel.Info)
+            QgsMessageLog.logMessage(f'COLUMN ROLES:\n{column_roles}', 'AlgoMaps', Qgis.MessageLevel.Info)
 
         try:
             from .BatchGeocoder import BatchGeocoder
-        except:
+        except Exception as e:
             self.iface.messageBar().pushMessage(self.tr(u'AlgoMaps'),
                                                 self.tr(
-                                                 u'Cannot initialize batch processing - error in code. Call the devs!'),
+                                                    u'Cannot initialize batch processing - error in code. Contact the AlgoMaps developers'),
                                                 level=Qgis.MessageLevel.Critical)
+            if DEBUG_MODE:
+                QgsMessageLog.logMessage(str(e), 'AlgoMaps', Qgis.MessageLevel.Warning)
             return
 
-        geocoder = BatchGeocoder(csv_path=self.csv_path, column_roles=[], iface=self.iface, dock_handle=self)
+        geocoder = BatchGeocoder(csv_path=self.csv_path,
+                                 column_roles=column_roles,
+                                 iface=self.iface,
+                                 dock_handle=self.dockwidget,
+                                 qproj=self.qproj,
+                                 dq_user=self.dq_user,
+                                 dq_token=self.dq_token,
+                                 flags=self.flags,
+                                 add_to_map=self.dockwidget.chk_add_map.isChecked(),
+                                 save_csv_path=self.csv_path_output,
+                                 header_type=self.batch_header_type,
+                                 sep=self.batch_sep,
+                                 quote=self.batch_quote)
         self.taskManager.addTask(geocoder)
         self.dockwidget.progress_batch.setVisible(True)
+        self.dockwidget.btn_cancel_batch.setVisible(True)
+        self.dockwidget.btn_batch_process.setEnabled(False)
+        self.dockwidget.btn_batch_process.setText('Przetwarzanie...')
+        self.dockwidget.txt_output_batch.setText('Przetwarzanie zadania może zająć od kilku do nawet kilkudziesięciu minut')
 
+    def file_batch_save_changed(self):
+        self.csv_path_output = self.dockwidget.file_batch_save.filePath()
+        if not self.csv_path_output:
+            self.dockwidget.chk_save_csv.setChecked(False)
+        else:
+            self.dockwidget.chk_save_csv.setChecked(True)
 
+    def txt_sep_changed(self):
+        new_sep = self.dockwidget.txt_sep.text()
+        QgsMessageLog.logMessage(f'CHANGED SEP: {new_sep}', 'AlgoMaps', Qgis.MessageLevel.Info)
+        if not new_sep:  # Empty lineEdit
+            return
+        if new_sep == '\\':
+            return
+        if new_sep == r'\t':
+            new_sep = '\t'
+        self.batch_sep = new_sep
+        self.show_csv_table(self.csv_path, self.batch_sep, self.batch_header_type, self.batch_quote)
 
+    def txt_quotechar_changed(self):
+        new_quote = self.dockwidget.txt_quotechar.text()
+        QgsMessageLog.logMessage(f'CHANGED QUOTECHAR: {new_quote}', 'AlgoMaps', Qgis.MessageLevel.Info)
+        if not new_quote:  # Empty lineEdit
+            return
+        if len(new_quote) > 1:
+            return
+        self.batch_quote = new_quote
+        self.show_csv_table(self.csv_path, self.batch_sep, self.batch_header_type, self.batch_quote)
 
+    def show_csv_table(self, csv_path, sep=',', header_type=None, quotechar='"'):
+        if DEBUG_MODE:
+            QgsMessageLog.logMessage(f'SHOW TABLE', 'AlgoMaps', Qgis.MessageLevel.Info)
+            QgsMessageLog.logMessage(f'{csv_path} {sep} {header_type} {quotechar}', 'AlgoMaps', Qgis.MessageLevel.Info)
 
+        #  Read the first 4 rows (to examine the columns and set the DQ parameters)
+        import pandas as pd
+        from .csv_utils import get_file_line_count
+
+        self.dockwidget.tableWidget_batch.clear()
+        self.dockwidget.tableWidget_batch.setColumnCount(0)
+        self.dockwidget.tableWidget_batch.setRowCount(0)
+        self.batch_combo_widgets = []
+
+        try:
+            df = pd.read_csv(csv_path, sep=sep, header=header_type, quotechar=quotechar, nrows=4, escapechar='\\',
+                             engine='python')
+        except:
+            return
+
+        # Add record count to UI
+        line_count = get_file_line_count(csv_path, header_type)
+        self.dockwidget.lbl_records.setText(f'Rekordów: {str(line_count)}')
+
+        # Add columns and rows
+        row_count, col_count = df.shape
+        [self.dockwidget.tableWidget_batch.insertColumn(0) for _ in range(col_count)]
+        [self.dockwidget.tableWidget_batch.insertRow(0) for _ in range(row_count + 1)]  # One more for comboBoxes
+        self.dockwidget.tableWidget_batch.setHorizontalHeaderLabels([str(col) for col in df.columns])
+
+        # Fill the table with DataFrame values
+        for i, row in enumerate(df.itertuples()):
+            for k in range(col_count):
+                self.dockwidget.tableWidget_batch.setItem(i + 1, k,
+                                                          QTableWidgetItem(str(row[k + 1])))  # k=0 is index
+
+        # Add column roles for DQ
+        for k in range(col_count):
+            new_role_combobox = QComboBox()
+            role_item_list = ['PRZEPISZ', 'POMIN',
+                              'ID_REKORDU',
+                              'DANE_OGOLNE',
+                              'KOD_POCZTOWY', 'MIEJSCOWOSC', 'ULICA_NUMER_DOMU_I_MIESZKANIA', 'ULICA', 'NUMER_DOMU',
+                              'NUMER_MIESZKANIA', 'NUMER_DOMU_I_MIESZKANIA', 'WOJEWODZTWO', 'POWIAT', 'GMINA'
+                              ]
+            new_role_combobox.insertItems(0, role_item_list)
+            new_role_combobox.insertSeparator(4)
+            new_role_combobox.insertSeparator(3)
+            new_role_combobox.insertSeparator(2)
+            self.batch_combo_widgets.append(new_role_combobox)
+            self.dockwidget.tableWidget_batch.setCellWidget(0, k, new_role_combobox)
+
+        # Show the table
+        self.dockwidget.tableWidget_batch.setVisible(True)
+        self.dockwidget.group_csv_info.setVisible(True)
+        self.dockwidget.group_batch.setVisible(True)
