@@ -447,6 +447,10 @@ class AlgoMapsPlugin:
             if DEBUG_MODE:
                 QgsMessageLog.logMessage("Zapisano ustawienia", tag='AlgoMaps', level=Qgis.MessageLevel.Success)
 
+            self.iface.messageBar().pushMessage(self.tr(u'AlgoMaps'),
+                                                self.tr(u'Zapisano ustawienia'),
+                                                level=Qgis.MessageLevel.Success)
+
         except:
             self.iface.messageBar().pushMessage(self.tr(u'AlgoMaps'),
                                                 self.tr(u'Zapis ustawień nie powiódł się'),
@@ -754,7 +758,7 @@ class AlgoMapsPlugin:
         }
 
     @staticmethod
-    def _parse_statuses(self, status):
+    def _parse_statuses(status):
 
         # Split status into three separate strings (match, geocode, others)
         import re
