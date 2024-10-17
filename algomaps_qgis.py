@@ -50,22 +50,24 @@ DEBUG_MODE = True  # Verbose messages
 
 
 def find_python():
+    def _log_python_path(ppath, tag='-'):
+        if DEBUG_MODE:
+            QgsMessageLog.logMessage(f'[{tag}] Found python executable: {ppath}',
+                                     tag='AlgoMaps',
+                                     level=Qgis.MessageLevel.Info)
+        pass
+
     import platform
 
     if platform.system() != "Windows":  # -> 'Linux' or 'Darwin' (MacOS)
         if 'python' in sys.executable:
-            if DEBUG_MODE:
-                QgsMessageLog.logMessage(f'Found python executable: {sys.executable}',
-                                         tag='AlgoMaps',
-                                         level=Qgis.MessageLevel.Info)
+            _log_python_path(sys.executable, tag='UNIX')
             return sys.executable
 
     if platform.system() == "Darwin":
         if DEBUG_MODE:
             py_exe = os.path.join(os.path.dirname(sys.executable), 'bin', 'python3')
-            QgsMessageLog.logMessage(f'MacOS looking for python... Trying {py_exe}',
-                                     tag='AlgoMaps',
-                                     level=Qgis.MessageLevel.Info)
+            _log_python_path(py_exe, tag='MacOS')
             return py_exe
 
     if platform.system() == 'Linux':
@@ -75,25 +77,39 @@ def find_python():
         for path in sys.path:  # TODO: check correctness
             assumed_path = os.path.join(path, "python.exe")
             if os.path.isfile(assumed_path):
+                _log_python_path(assumed_path, tag='Windows')
                 return assumed_path
 
     return None
 
 
-def install_pip(module_name, upgrade=False):
+def install_module(module_name, upgrade=False, force_external=False):
     import subprocess
 
     QgsMessageLog.logMessage(f'Install {module_name}', 'AlgoMaps', level=Qgis.MessageLevel.Info)
+
     arg_list = [find_python(), '-m', 'pip', 'install', module_name]
     if upgrade:
         arg_list.insert(4, '--upgrade')
+    if force_external:
+        arg_list.insert(4, '--break-system-packages')
+
+    if DEBUG_MODE:
+        QgsMessageLog.logMessage(' '.join(arg_list),
+                                 tag='AlgoMaps',
+                                 level=Qgis.MessageLevel.Info)
 
     result = subprocess.run(arg_list,
                             stdout=subprocess.PIPE,
                             stderr=subprocess.STDOUT)
 
-    if result.returncode == 1:
-        if 'no module named pip' in result.stdout.decode(encoding="utf-8").lower():
+    return_code = result.returncode
+    QgsMessageLog.logMessage(f'Return code: {return_code}', 'AlgoMaps', level=Qgis.MessageLevel.Info)
+
+    if return_code == 1:
+        pip_message = result.stdout.decode(encoding="utf-8").lower()
+
+        if 'no module named pip' in pip_message:
             QgsMessageLog.logMessage(f'Trying to install pip...',
                                      'AlgoMaps',
                                      level=Qgis.MessageLevel.Info)
@@ -104,17 +120,27 @@ def install_pip(module_name, upgrade=False):
             # Retry module install
             if wget_res.returncode == 0 and pip_res.returncode == 0:
                 subprocess.run(['rm', 'get-pip.py'])
-                install_pip(module_name, upgrade)
+                install_module(module_name, upgrade=upgrade)
             else:
+                # TODO: install with apt/other package manager
                 QgsMessageLog.logMessage(f'Could not use pip to install modules. Batch will not work!',
                                          'AlgoMaps',
                                          level=Qgis.MessageLevel.Critical)
 
-    return_code = result.returncode
-    QgsMessageLog.logMessage(f'Return code: {return_code}', 'AlgoMaps', level=Qgis.MessageLevel.Info)
+        if 'externally managed environment' in pip_message:
+            # TODO: check on ChromeOS
+            if force_external:  # We tried to force install before and it didn't work
+                QgsMessageLog.logMessage(f'Could not use pip to install modules. Batch will not work!',
+                                         'AlgoMaps',
+                                         level=Qgis.MessageLevel.Critical)
+                return
+
+            # Try force install module to system-wise Python
+            install_module(module_name, upgrade=upgrade, force_external=True)
 
     if return_code != 0:
-        QgsMessageLog.logMessage(f'Stdout: {result.stdout.decode(encoding="utf-8")}', 'AlgoMaps',
+        QgsMessageLog.logMessage(f'Unknown error code. Stdout: {result.stdout.decode(encoding="utf-8")}',
+                                 tag='AlgoMaps',
                                  level=Qgis.MessageLevel.Warning)
 
     return return_code
@@ -957,7 +983,7 @@ class AlgoMapsPlugin:
             except ModuleNotFoundError as e:
 
                 QgsMessageLog.logMessage('Installing pandas...', level=Qgis.MessageLevel.Info)
-                ret_code = install_pip('pandas', upgrade=False)
+                ret_code = install_module('pandas', upgrade=False)
                 if ret_code == 0:
                     self.iface.messageBar().pushMessage(self.tr(u'AlgoMaps'),
                                                         self.tr(
@@ -972,9 +998,9 @@ class AlgoMapsPlugin:
             except ModuleNotFoundError as e:
 
                 QgsMessageLog.logMessage('Installing dq-client...', level=Qgis.MessageLevel.Info)
-                ret_code_dq = install_pip('dq-client', upgrade=False)
+                ret_code_dq = install_module('dq-client', upgrade=False)
                 QgsMessageLog.logMessage('Installing requests...', level=Qgis.MessageLevel.Info)
-                ret_code_r = install_pip('requests', upgrade=True)
+                ret_code_r = install_module('requests', upgrade=True)
 
                 if ret_code_dq == 0 and ret_code_r == 0:
                     self.iface.messageBar().pushMessage(self.tr(u'AlgoMaps'),
