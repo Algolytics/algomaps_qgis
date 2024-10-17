@@ -23,7 +23,7 @@
 """
 from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication, Qt
 from qgis.PyQt.QtGui import QIcon
-from qgis.PyQt.QtWidgets import QAction, QTableWidgetItem, QComboBox
+from qgis.PyQt.QtWidgets import QAction, QTableWidgetItem, QComboBox, QMessageBox
 
 from qgis.core import (
     QgsApplication,
@@ -307,36 +307,6 @@ class AlgoMapsPlugin:
 
         self.qproj = QgsProject.instance()
 
-        # Check pandas import
-        try:
-            import pandas as pd
-        except ModuleNotFoundError as e:
-
-            QgsMessageLog.logMessage('Installing pandas...', level=Qgis.MessageLevel.Info)
-            ret_code = install_pip('pandas', upgrade=False)
-            if ret_code == 0:
-                self.iface.messageBar().pushMessage(self.tr(u'AlgoMaps'),
-                                                    self.tr(
-                                                        u'New module `pandas` installed. Restart QGIS to use AlgoMaps plugin'),
-                                                    level=Qgis.MessageLevel.Warning)
-
-        # Check dq-client import
-        try:
-            import dq
-
-        except ModuleNotFoundError as e:
-
-            QgsMessageLog.logMessage('Installing dq-client...', level=Qgis.MessageLevel.Info)
-            ret_code_dq = install_pip('dq-client', upgrade=False)
-            QgsMessageLog.logMessage('Installing requests...', level=Qgis.MessageLevel.Info)
-            ret_code_r = install_pip('requests', upgrade=True)
-
-            if ret_code_dq == 0 and ret_code_r == 0:
-                self.iface.messageBar().pushMessage(self.tr(u'AlgoMaps'),
-                                                    self.tr(
-                                                        u'New module `dq-client` installed. Restart QGIS to use AlgoMaps plugin'),
-                                                    level=Qgis.MessageLevel.Warning)
-
     def onClosePlugin(self):
         """Cleanup necessary items here when plugin dockwidget is closed"""
 
@@ -371,6 +341,22 @@ class AlgoMapsPlugin:
             #    first run of plugin
             #    removed on close (see self.onClosePlugin method)
             if self.dockwidget is None:
+                # Check imports
+                try:
+                    import pandas as pd
+                    import dq
+                except ModuleNotFoundError as e:
+                    msg_box = QMessageBox()
+                    msg_box.setIcon(QMessageBox.Question)
+                    msg_box.setWindowTitle("Instalacja bibliotek Python")
+                    msg_box.setText("Czy chcesz zainstalować dodatkowe bilioteki Python? \n - pandas \n - dq-client \n\n"
+                                    "Są one potrzebne do poprawnego działania funkcji Batch (przetwarzania wsadowego).\n"
+                                    "Bez ich instalacji nie będzie można używać funkcji Batch.")
+                    msg_box.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
+
+                    ret_value = msg_box.exec()
+                    self._msg_install_clicked(ret_value)
+
                 # Create the dockwidget (after translation) and keep reference
                 self.dockwidget = AlgoMapsPluginDockWidget()
 
@@ -956,3 +942,43 @@ class AlgoMapsPlugin:
         self.dockwidget.tableWidget_batch.setVisible(True)
         self.dockwidget.group_csv_info.setVisible(True)
         self.dockwidget.group_batch.setVisible(True)
+
+    def _msg_install_clicked(self, val):
+        if val == QMessageBox.Ok:
+
+            if DEBUG_MODE:
+                QgsMessageLog.logMessage('User confirmed modules install',
+                                         tag='AlgoMaps',
+                                         level=Qgis.MessageLevel.Info)
+
+            # Check pandas import
+            try:
+                import pandas as pd
+            except ModuleNotFoundError as e:
+
+                QgsMessageLog.logMessage('Installing pandas...', level=Qgis.MessageLevel.Info)
+                ret_code = install_pip('pandas', upgrade=False)
+                if ret_code == 0:
+                    self.iface.messageBar().pushMessage(self.tr(u'AlgoMaps'),
+                                                        self.tr(
+                                                            u'New module `pandas` installed. Restart QGIS to use '
+                                                            u'AlgoMaps plugin'),
+                                                        level=Qgis.MessageLevel.Warning)
+
+            # Check dq-client import
+            try:
+                import dq
+
+            except ModuleNotFoundError as e:
+
+                QgsMessageLog.logMessage('Installing dq-client...', level=Qgis.MessageLevel.Info)
+                ret_code_dq = install_pip('dq-client', upgrade=False)
+                QgsMessageLog.logMessage('Installing requests...', level=Qgis.MessageLevel.Info)
+                ret_code_r = install_pip('requests', upgrade=True)
+
+                if ret_code_dq == 0 and ret_code_r == 0:
+                    self.iface.messageBar().pushMessage(self.tr(u'AlgoMaps'),
+                                                        self.tr(
+                                                            u'New module `dq-client` installed. Restart QGIS to use '
+                                                            u'AlgoMaps plugin'),
+                                                        level=Qgis.MessageLevel.Warning)
