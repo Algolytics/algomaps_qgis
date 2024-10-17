@@ -50,13 +50,32 @@ DEBUG_MODE = True  # Verbose messages
 
 
 def find_python():
-    if sys.platform != "win32":
-        return sys.executable
+    import platform
 
-    for path in sys.path:  # TODO: check correctness
-        assumed_path = os.path.join(path, "python.exe")
-        if os.path.isfile(assumed_path):
-            return assumed_path
+    if platform.system() != "Windows":  # -> 'Linux' or 'Darwin' (MacOS)
+        if 'python' in sys.executable:
+            if DEBUG_MODE:
+                QgsMessageLog.logMessage(f'Found python executable: {sys.executable}',
+                                         tag='AlgoMaps',
+                                         level=Qgis.MessageLevel.Info)
+            return sys.executable
+
+    if platform.system() == "Darwin":
+        if DEBUG_MODE:
+            py_exe = os.path.join(os.path.dirname(sys.executable), 'bin', 'python3')
+            QgsMessageLog.logMessage(f'MacOS looking for python... Trying {py_exe}',
+                                     tag='AlgoMaps',
+                                     level=Qgis.MessageLevel.Info)
+            return py_exe
+
+    if platform.system() == 'Linux':
+        ...
+
+    if platform.system() == "Windows":
+        for path in sys.path:  # TODO: check correctness
+            assumed_path = os.path.join(path, "python.exe")
+            if os.path.isfile(assumed_path):
+                return assumed_path
 
     return None
 
