@@ -83,7 +83,30 @@ def find_python():
     return None
 
 
-def install_module(module_name, upgrade=False, force_external=False):
+def _get_package_manager_command():
+    import platform
+
+    if platform.system() == 'Linux':
+        os_info = platform.freedesktop_os_release().get('ID', 'linux')
+        if os_info in ('ubuntu', 'debian', 'linuxmint', 'kubuntu', 'xubuntu', 'lubuntu', 'pop', 'peppermint', 'mx'):
+            return ['apt', 'install']
+        if os_info in ('fedora', 'centos', 'rhel'):
+            return ['yum', 'install']
+        if os_info in ('arch', 'manjaro'):
+            return ['pacman', '-S']
+        if os_info in ('opensuse', 'suse'):
+            return ['zypper', 'install']
+        if os_info in ('gentoo', 'funtoo', 'chromeos'):
+            return ['emerge']
+
+    if platform.system() == 'Darwin':
+        return ['brew', 'install']
+
+
+def install_module(module_name, upgrade=False, force_external=False, curr_depth=0):
+    if curr_depth > 3:  # Recursion failsafe
+        return
+
     import subprocess
 
     QgsMessageLog.logMessage(f'Install {module_name}', 'AlgoMaps', level=Qgis.MessageLevel.Info)
@@ -114,21 +137,38 @@ def install_module(module_name, upgrade=False, force_external=False):
                                      'AlgoMaps',
                                      level=Qgis.MessageLevel.Info)
             # Install pip
-            wget_res = subprocess.run(['wget', 'https://bootstrap.pypa.io/get-pip.py'])
-            pip_res = subprocess.run([find_python(), 'get-pip.py'])
+            wget_res = subprocess.run(['wget', 'algomaps_get-pip.py', 'https://bootstrap.pypa.io/get-pip.py'])
+            pip_res = subprocess.run([find_python(), 'algomaps_get-pip.py'])
 
-            # Retry module install
+            # Check if pip has been installed
             if wget_res.returncode == 0 and pip_res.returncode == 0:
-                subprocess.run(['rm', 'get-pip.py'])
-                install_module(module_name, upgrade=upgrade)
+                subprocess.run(['rm', 'algomaps_get-pip.py'])  # cleanup
             else:
-                # TODO: install with apt/other package manager
-                QgsMessageLog.logMessage(f'Could not use pip to install modules. Batch will not work!',
-                                         'AlgoMaps',
-                                         level=Qgis.MessageLevel.Critical)
+                # Try to install pip with apt/other package manager
+                package_manager_cmd = _get_package_manager_command()
+                args_list = [*package_manager_cmd,
+                             'python3-pip',
+                             'python3-setuptools',  # for zypper
+                             'python3-wheel']  # for yum and zypper
+                if package_manager_cmd[0] == 'pacman':
+                    args_list = [*package_manager_cmd, 'python-pip']
 
-        if 'externally managed environment' in pip_message:
-            # TODO: check on ChromeOS
+                apt_res = subprocess.run(args_list)
+                if apt_res.returncode == 0:
+                    # Installed pip
+                    ...
+                else:
+                    QgsMessageLog.logMessage(f'Could not install pip to install modules. Try to execute the '
+                                             'troubleshooting steps (README.md) or contact the developer team '
+                                             '(e.g. post an issue on GitHub)!',
+                                             tag='AlgoMaps',
+                                             level=Qgis.MessageLevel.Critical)
+                    return
+
+            # Try reinstalling the Python module
+            install_module(module_name, upgrade=upgrade, curr_depth=curr_depth+1)
+
+        if 'externally managed environment' in pip_message or 'externally-managed-environment' in pip_message:
             if force_external:  # We tried to force install before and it didn't work
                 QgsMessageLog.logMessage(f'Could not use pip to install modules. Batch will not work!',
                                          'AlgoMaps',
@@ -136,7 +176,7 @@ def install_module(module_name, upgrade=False, force_external=False):
                 return
 
             # Try force install module to system-wise Python
-            install_module(module_name, upgrade=upgrade, force_external=True)
+            install_module(module_name, upgrade=upgrade, force_external=True, curr_depth=curr_depth+1)
 
     if return_code != 0:
         QgsMessageLog.logMessage(f'Unknown error code. Stdout: {result.stdout.decode(encoding="utf-8")}',

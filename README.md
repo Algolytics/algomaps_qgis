@@ -58,6 +58,10 @@ Przetwarzanie wsadowe (batch):
 9. Powróć do QGIS i wklej klucz do pola "DQ token" w Ustawieniach wtyczki AlgoMaps.
 10.	W polu "DQ user" wpisz adres email swojego konta.
 
+### Rozwiązywanie problemów
+
+TODO
+
 ### Dziennik zmian
 
 TODO
@@ -118,6 +122,10 @@ Batch processing:
    account.
 9. Copy the "API access key".
 10. Return to QGIS and paste the access key into the "API key" field.
+
+### Troubleshooting
+
+TODO
 
 ### Changelog
 
