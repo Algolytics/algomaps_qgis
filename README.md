@@ -58,6 +58,52 @@ Przetwarzanie wsadowe (batch):
 9. Powróć do QGIS i wklej klucz do pola "DQ token" w Ustawieniach wtyczki AlgoMaps.
 10.	W polu "DQ user" wpisz adres email swojego konta.
 
+### Korzystanie z przetwarzania wsadowego (batch)
+
+#### 
+
+#### Funkcje (role) kolumn
+Funkcja kolumny (lub inaczej jej "rola") określa jaki typ danych znajduje się w danej kolumnie pliku wejściowego. 
+Każda kolumna w pliku wejściowym może mieć tylko jedną funkcję. Każda funkcja w pliku wejściowym może wystąpić tylko raz. 
+Wyjątek stanowią funkcje `PRZEPISZ` i `POMIN`, które mogą występować wielokrotnie.
+
+W przypadku gdy dany wiersz nie wykorzystuje danej funkcji (np. nie jest podany nr domu), wartość kolumny w danym 
+wierszu powinna być pusta. 
+
+Kolumny mogą mieć następujące funkcje:
+
+- Zmienna neutralna  
+  - `PRZEPISZ` – kopiuje zmienną do pliku wyjściowego
+  - `POMIN` – nie kopiuje zmiennej do pliku wyjściowego
+- Identyfikator  
+  - `ID_REKORDU`
+- Zmienna niesprecyzowana  
+  - `DANE_OGOLNE` – zmienna zostanie przeanalizowana pod kątem wszystkich możliwych informacji adresowych
+- Zmienna adresowa  
+  - `KOD_POCZTOWY`  
+  - `MIEJSCOWOSC`  
+  - `ULICA_NUMER_DOMU_I_MIESZKANIA`
+  - `ULICA`
+  - `NUMER_DOMU`
+  - `NUMER_MIESZKANIA`
+  - `NUMER_DOMU_I_MIESZKANIA`
+  - `WOJEWODZTWO`
+  - `POWIAT`
+  - `GMINA`
+
+Reguły:  
+
+- aby można było rozpocząć przetwarzanie, wymagana jest przynajmniej jedna z kolumn: `DANE_OGOLNE`, `KOD_POCZTOWY` lub `MIEJSCOWOSC`
+- jeśli istnieje kolumna `ULICA`, to wszystkie informacje w `ULICA_NUMER_DOMU_I_MIESZKANIA` są ignorowane
+- jeśli istnieje kolumna `NUMER_DOMU`, to wszystkie informacje na temat numeru domu i mieszkania z `ULICA_NUMER_DOMU_I_MIESZKANIA` oraz `NUMER_DOMU_I_MIESZKANIA` są ignorowane
+- jeśli nie istnieje kolumna `NUMER_DOMU`, to kolumna `NUMER_MIESZKANIA` jest ignorowana
+- jeśli nie istnieje kolumna `ULICA` i istnieje kolumna `ULICA_NUMER_DOMU_I_MIESZKANIA`, to kolumna `NUMER_DOMU_I_MIESZKANIA` jest ignorowana
+- jeśli istnieje którakolwiek z kolumn (`KOD_POCZTOWY`, `MIEJSCOWOSC`, `ULICA_NUMER_DOMU_I_MIESZKANIA`, `ULICA`, `NUMER_DOMU`, `NUMER_DOMU_I_MIESZKANIA`), to kolumna `DANE_OGOLNE` jest ignorowana
+
+Dopuszczalne jest wysłanie kilku kolumn o funkcjach zawierających tę samą informację (np. numer mieszkania), przy czym 
+użytkownik powinien zadbać o to, aby taka informacja nie była powielona w wielu kolumnach. Funkcjonalność służy do tego,
+aby możliwe było przeprocesowanie wierszy o tych samych informacjach rozłożonych w kolumnach o różnych funkcjach. 
+
 ### Dziennik zmian
 
 TODO
