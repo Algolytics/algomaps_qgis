@@ -104,6 +104,10 @@ Dopuszczalne jest wysłanie kilku kolumn o funkcjach zawierających tę samą in
 użytkownik powinien zadbać o to, aby taka informacja nie była powielona w wielu kolumnach. Funkcjonalność służy do tego,
 aby możliwe było przeprocesowanie wierszy o tych samych informacjach rozłożonych w kolumnach o różnych funkcjach. 
 
+### Rozwiązywanie problemów
+
+TODO
+
 ### Dziennik zmian
 
 TODO
@@ -164,6 +168,14 @@ Batch processing:
    account.
 9. Copy the "API access key".
 10. Return to QGIS and paste the access key into the "API key" field.
+
+### Batch processing
+
+TODO
+
+### Troubleshooting
+
+TODO
 
 ### Changelog
 

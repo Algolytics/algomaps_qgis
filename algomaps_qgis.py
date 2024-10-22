@@ -50,22 +50,24 @@ DEBUG_MODE = True  # Verbose messages
 
 
 def find_python():
+    def _log_python_path(ppath, tag='-'):
+        if DEBUG_MODE:
+            QgsMessageLog().logMessage(message=f'[{tag}] Found python executable: {ppath}',
+                                     tag='AlgoMaps',
+                                     level=Qgis.MessageLevel.Info)
+        pass
+
     import platform
 
     if platform.system() != "Windows":  # -> 'Linux' or 'Darwin' (MacOS)
         if 'python' in sys.executable:
-            if DEBUG_MODE:
-                QgsMessageLog.logMessage(f'Found python executable: {sys.executable}',
-                                         tag='AlgoMaps',
-                                         level=Qgis.MessageLevel.Info)
+            _log_python_path(sys.executable, tag='UNIX')
             return sys.executable
 
     if platform.system() == "Darwin":
         if DEBUG_MODE:
             py_exe = os.path.join(os.path.dirname(sys.executable), 'bin', 'python3')
-            QgsMessageLog.logMessage(f'MacOS looking for python... Trying {py_exe}',
-                                     tag='AlgoMaps',
-                                     level=Qgis.MessageLevel.Info)
+            _log_python_path(py_exe, tag='MacOS')
             return py_exe
 
     if platform.system() == 'Linux':
@@ -75,49 +77,30 @@ def find_python():
         for path in sys.path:  # TODO: check correctness
             assumed_path = os.path.join(path, "python.exe")
             if os.path.isfile(assumed_path):
+                _log_python_path(assumed_path, tag='Windows')
                 return assumed_path
 
     return None
 
 
-def install_pip(module_name, upgrade=False):
-    import subprocess
+def _get_package_manager_command():
+    import platform
 
-    QgsMessageLog.logMessage(f'Install {module_name}', 'AlgoMaps', level=Qgis.MessageLevel.Info)
-    arg_list = [find_python(), '-m', 'pip', 'install', module_name]
-    if upgrade:
-        arg_list.insert(4, '--upgrade')
+    if platform.system() == 'Linux':
+        os_info = platform.freedesktop_os_release().get('ID', 'linux')
+        if os_info in ('ubuntu', 'debian', 'linuxmint', 'kubuntu', 'xubuntu', 'lubuntu', 'pop', 'peppermint', 'mx'):
+            return ['apt', 'install']
+        if os_info in ('fedora', 'centos', 'rhel'):
+            return ['yum', 'install']
+        if os_info in ('arch', 'manjaro'):
+            return ['pacman', '-S']
+        if os_info in ('opensuse', 'suse'):
+            return ['zypper', 'install']
+        if os_info in ('gentoo', 'funtoo', 'chromeos'):
+            return ['emerge']
 
-    result = subprocess.run(arg_list,
-                            stdout=subprocess.PIPE,
-                            stderr=subprocess.STDOUT)
-
-    if result.returncode == 1:
-        if 'no module named pip' in result.stdout.decode(encoding="utf-8").lower():
-            QgsMessageLog.logMessage(f'Trying to install pip...',
-                                     'AlgoMaps',
-                                     level=Qgis.MessageLevel.Info)
-            # Install pip
-            wget_res = subprocess.run(['wget', 'https://bootstrap.pypa.io/get-pip.py'])
-            pip_res = subprocess.run([find_python(), 'get-pip.py'])
-
-            # Retry module install
-            if wget_res.returncode == 0 and pip_res.returncode == 0:
-                subprocess.run(['rm', 'get-pip.py'])
-                install_pip(module_name, upgrade)
-            else:
-                QgsMessageLog.logMessage(f'Could not use pip to install modules. Batch will not work!',
-                                         'AlgoMaps',
-                                         level=Qgis.MessageLevel.Critical)
-
-    return_code = result.returncode
-    QgsMessageLog.logMessage(f'Return code: {return_code}', 'AlgoMaps', level=Qgis.MessageLevel.Info)
-
-    if return_code != 0:
-        QgsMessageLog.logMessage(f'Stdout: {result.stdout.decode(encoding="utf-8")}', 'AlgoMaps',
-                                 level=Qgis.MessageLevel.Warning)
-
-    return return_code
+    if platform.system() == 'Darwin':
+        return ['brew', 'install']
 
 
 class AlgoMapsPlugin:
@@ -205,7 +188,7 @@ class AlgoMapsPlugin:
             iface.messageBar().pushMessage(self.tr(u'AlgoMaps'),
                                            self.tr(u'Cannot read config file, check details in "Log Messages" tab.'),
                                            level=Qgis.MessageLevel.Critical)
-            QgsMessageLog.logMessage(repr(e), tag='AlgoMaps', level=Qgis.MessageLevel.Critical)
+            QgsMessageLog().logMessage(repr(e), tag='AlgoMaps', level=Qgis.MessageLevel.Critical)
 
     # noinspection PyMethodMayBeStatic
     def tr(self, message):
@@ -221,6 +204,104 @@ class AlgoMapsPlugin:
         """
         # noinspection PyTypeChecker,PyArgumentList,PyCallByClass
         return QCoreApplication.translate('AlgoMapsPlugin', message)
+
+    def install_module(self, module_name, upgrade=False, force_external=False, curr_depth=0):
+        if curr_depth > 3:  # Recursion failsafe
+            return
+
+        import subprocess
+
+        QgsMessageLog().logMessage(message=f'Install {module_name}',
+                                   tag='AlgoMaps',
+                                   level=Qgis.MessageLevel.Info)
+
+        arg_list = [find_python(), '-m', 'pip', 'install', module_name]
+        if upgrade:
+            arg_list.insert(4, '--upgrade')
+        if force_external:
+            arg_list.insert(4, '--break-system-packages')
+
+        if DEBUG_MODE:
+            QgsMessageLog().logMessage(message=' '.join(arg_list),
+                                       tag='AlgoMaps',
+                                       level=Qgis.MessageLevel.Info)
+
+        result = subprocess.run(arg_list,
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT)
+
+        return_code = result.returncode
+        QgsMessageLog().logMessage(message=f'Return code: {return_code}',
+                                   tag='AlgoMaps',
+                                   level=Qgis.MessageLevel.Info)
+
+        if return_code == 1:
+            pip_message = result.stdout.decode(encoding="utf-8").lower()
+
+            if 'no module named pip' in pip_message:
+                QgsMessageLog().logMessage(message=f'Trying to install pip...',
+                                           tag='AlgoMaps',
+                                           level=Qgis.MessageLevel.Info)
+                # Install pip
+                wget_res = subprocess.run(['wget', 'algomaps_get-pip.py', 'https://bootstrap.pypa.io/get-pip.py'])
+                pip_res = subprocess.run([find_python(), 'algomaps_get-pip.py'])
+
+                # Check if pip has been installed
+                if wget_res.returncode == 0 and pip_res.returncode == 0:
+                    subprocess.run(['rm', 'algomaps_get-pip.py'])  # cleanup
+                else:
+                    # Try to install pip with apt/other package manager
+                    package_manager_cmd = _get_package_manager_command()
+                    args_list = [*package_manager_cmd,
+                                 'python3-pip',
+                                 'python3-setuptools',  # for zypper
+                                 'python3-wheel']  # for yum and zypper
+                    if package_manager_cmd[0] == 'pacman':
+                        args_list = [*package_manager_cmd, 'python-pip']
+
+                    apt_res = subprocess.run(args_list)
+                    if apt_res.returncode == 0:
+                        # Installed pip
+                        ...
+                    else:
+                        QgsMessageLog().logMessage(message=f'Could not install pip to install modules. Try to execute '
+                                                           f'the troubleshooting steps (README.md) or contact the '
+                                                           f'developer team (e.g. post an issue on GitHub)!',
+                                                   tag='AlgoMaps',
+                                                   level=Qgis.MessageLevel.Critical)
+                        return
+
+                # Try reinstalling the Python module
+                self.install_module(module_name, upgrade=upgrade, curr_depth=curr_depth + 1)
+
+            if 'externally managed environment' in pip_message or 'externally-managed-environment' in pip_message:
+                if force_external:  # We tried to force install before and it didn't work
+                    QgsMessageLog().logMessage(message=f'Could not use pip to install modules. Batch will not work!',
+                                               tag='AlgoMaps',
+                                               level=Qgis.MessageLevel.Critical)
+                    return
+
+                # Try force install module to system-wise Python
+                msg_box = QMessageBox()
+                msg_box.setIcon(QMessageBox.Question)
+                msg_box.setWindowTitle(f"Instalacja biblioteki {module_name.split('>')[0]}")  # nazwa bez nr wersji
+                msg_box.setText("Twoja instalacja Python jest zarządzana zewnętrznie (externally-managed). Instalacja "
+                                "dodatkowych bibliotek może w rzadkich przypadkach spowodować niekompatybilność innch "
+                                f"modułów. Czy na pewno chcesz zainstalować bibliotekę {module_name.split('>')[0]}?")
+                msg_box.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
+
+                ret_value = msg_box.exec()
+
+                if ret_value == QMessageBox.Ok:
+                    self.install_module(module_name, upgrade=upgrade, force_external=True, curr_depth=curr_depth + 1)
+                return
+
+        if return_code != 0:
+            QgsMessageLog().logMessage(message=f'Unknown error code. Stdout: {result.stdout.decode(encoding="utf-8")}',
+                                       tag='AlgoMaps',
+                                       level=Qgis.MessageLevel.Warning)
+
+        return return_code
 
     def add_action(
             self,
@@ -307,36 +388,6 @@ class AlgoMapsPlugin:
 
         self.qproj = QgsProject.instance()
 
-        # Check pandas import
-        try:
-            import pandas as pd
-        except ModuleNotFoundError as e:
-
-            QgsMessageLog.logMessage('Installing pandas...', level=Qgis.MessageLevel.Info)
-            ret_code = install_pip('pandas', upgrade=False)
-            if ret_code == 0:
-                self.iface.messageBar().pushMessage(self.tr(u'AlgoMaps'),
-                                                    self.tr(
-                                                        u'New module `pandas` installed. Restart QGIS to use AlgoMaps plugin'),
-                                                    level=Qgis.MessageLevel.Warning)
-
-        # Check dq-client import
-        try:
-            import dq
-
-        except ModuleNotFoundError as e:
-
-            QgsMessageLog.logMessage('Installing dq-client...', level=Qgis.MessageLevel.Info)
-            ret_code_dq = install_pip('dq-client', upgrade=False)
-            QgsMessageLog.logMessage('Installing requests...', level=Qgis.MessageLevel.Info)
-            ret_code_r = install_pip('requests', upgrade=True)
-
-            if ret_code_dq == 0 and ret_code_r == 0:
-                self.iface.messageBar().pushMessage(self.tr(u'AlgoMaps'),
-                                                    self.tr(
-                                                        u'New module `dq-client` installed. Restart QGIS to use AlgoMaps plugin'),
-                                                    level=Qgis.MessageLevel.Warning)
-
     def onClosePlugin(self):
         """Cleanup necessary items here when plugin dockwidget is closed"""
 
@@ -371,6 +422,22 @@ class AlgoMapsPlugin:
             #    first run of plugin
             #    removed on close (see self.onClosePlugin method)
             if self.dockwidget is None:
+                # Check imports
+                try:
+                    import pandas as pd
+                    import dq
+                except ModuleNotFoundError as e:
+                    msg_box = QMessageBox()
+                    msg_box.setIcon(QMessageBox.Question)
+                    msg_box.setWindowTitle("Instalacja bibliotek Python")
+                    msg_box.setText("Czy chcesz zainstalować dodatkowe bilioteki Python? \n - pandas \n - dq-client\n\n"
+                                    "Są one potrzebne do poprawnego działania funkcji Batch (przetwarzanie wsadowe).\n"
+                                    "Bez ich instalacji nie będzie można przetwarzać plików CSV.")
+                    msg_box.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
+
+                    ret_value = msg_box.exec()
+                    self._msg_install_clicked(ret_value)
+
                 # Create the dockwidget (after translation) and keep reference
                 self.dockwidget = AlgoMapsPluginDockWidget()
 
@@ -435,7 +502,7 @@ class AlgoMapsPlugin:
         self.populate_checkbox_settings_ui()
 
         if DEBUG_MODE:
-            QgsMessageLog.logMessage("Reset ustawień.", tag='AlgoMaps', level=Qgis.MessageLevel.Info)
+            QgsMessageLog().logMessage(message="Reset ustawień.", tag='AlgoMaps', level=Qgis.MessageLevel.Info)
 
     def save_settings(self):
         try:
@@ -464,7 +531,7 @@ class AlgoMapsPlugin:
             self.default_chk_financial = new_settings["default_chk_financial"]
 
             if DEBUG_MODE:
-                QgsMessageLog.logMessage("Zapisano ustawienia", tag='AlgoMaps', level=Qgis.MessageLevel.Success)
+                QgsMessageLog().logMessage(message="Zapisano ustawienia", tag='AlgoMaps', level=Qgis.MessageLevel.Success)
 
             self.iface.messageBar().pushMessage(self.tr(u'AlgoMaps'),
                                                 self.tr(u'Zapisano ustawienia'),
@@ -477,7 +544,7 @@ class AlgoMapsPlugin:
 
     def clicked_geocode_general(self):
         if DEBUG_MODE:
-            QgsMessageLog.logMessage("Geokoduj (jedno pole adresowe)", tag='AlgoMaps', level=Qgis.MessageLevel.Info)
+            QgsMessageLog().logMessage(message="Geokoduj (jedno pole adresowe)", tag='AlgoMaps', level=Qgis.MessageLevel.Info)
 
         dane_ogolne = self.dockwidget.txt_generaldata.text()
 
@@ -506,7 +573,7 @@ class AlgoMapsPlugin:
 
     def clicked_geocode_details(self):
         if DEBUG_MODE:
-            QgsMessageLog.logMessage("Geokoduj (dane szczegółowe)", tag='AlgoMaps', level=Qgis.MessageLevel.Info)
+            QgsMessageLog().logMessage(message="Geokoduj (dane szczegółowe)", tag='AlgoMaps', level=Qgis.MessageLevel.Info)
 
         w = self.dockwidget.txt_voivodeship.text()
         p = self.dockwidget.txt_county.text()
@@ -567,7 +634,7 @@ class AlgoMapsPlugin:
             }
         }
         if DEBUG_MODE:
-            QgsMessageLog.logMessage('SEND: ' + repr(input_json), tag='AlgoMaps', level=Qgis.MessageLevel.Info)
+            QgsMessageLog().logMessage(message='SEND: ' + repr(input_json), tag='AlgoMaps', level=Qgis.MessageLevel.Info)
 
         headers = {
             'Content-Type': 'application/json',
@@ -710,7 +777,7 @@ class AlgoMapsPlugin:
             else:
                 cnt_invalid += 1
                 if DEBUG_MODE:
-                    QgsMessageLog.logMessage(f'Can\'t add {key}', 'AlgoMaps', Qgis.MessageLevel.Warning)
+                    QgsMessageLog().logMessage(message=f'Can\'t add {key}', tag='AlgoMaps', level=Qgis.MessageLevel.Warning)
 
         if cnt_invalid > 0:
             self.iface.messageBar().pushMessage(self.tr(u'AlgoMaps'),
@@ -765,9 +832,9 @@ class AlgoMapsPlugin:
 
         if DEBUG_MODE:
             include_txt = str([self.include_teryt, self.include_gus, self.include_buildinfo, self.include_financial])
-            QgsMessageLog().logMessage('Checkbox state: [TERYT, GUS, BUILDINFO, FINANCIAL]', 'AlgoMaps',
+            QgsMessageLog().logMessage(message='Checkbox state: [TERYT, GUS, BUILDINFO, FINANCIAL]', tag='AlgoMaps',
                                        level=Qgis.MessageLevel.Info)
-            QgsMessageLog().logMessage(include_txt, 'AlgoMaps', level=Qgis.MessageLevel.Info)
+            QgsMessageLog().logMessage(include_txt, tag='AlgoMaps', level=Qgis.MessageLevel.Info)
 
         self.flags = {
             'gus': self.include_gus,
@@ -805,7 +872,7 @@ class AlgoMapsPlugin:
         from .csv_utils import identify_header, identify_delimiter_and_quotechar
 
         if DEBUG_MODE:
-            QgsMessageLog.logMessage('BATCH FILE PATH CHANGED', 'AlgoMaps', Qgis.MessageLevel.Info)
+            QgsMessageLog().logMessage(message='BATCH FILE PATH CHANGED', tag='AlgoMaps', level=Qgis.MessageLevel.Info)
 
         try:
             self.csv_path = self.dockwidget.file_batch_load.filePath()
@@ -816,7 +883,7 @@ class AlgoMapsPlugin:
             # Infer the csv separator and quoting char
             sep, quotechar = identify_delimiter_and_quotechar(self.csv_path)
             if DEBUG_MODE:
-                QgsMessageLog.logMessage(f'Separator: {sep} / Quotechar: {quotechar}', 'AlgoMaps', Qgis.MessageLevel.Info)
+                QgsMessageLog().logMessage(message=f'Separator: {sep} / Quotechar: {quotechar}', tag='AlgoMaps', level=Qgis.MessageLevel.Info)
 
             self.batch_sep = str(sep) if sep else ','
             self.batch_quote = str(quotechar) if quotechar else '"'
@@ -828,7 +895,7 @@ class AlgoMapsPlugin:
 
         except Exception as e:
             raise
-            # QgsMessageLog.logMessage(str(e), 'AlgoMaps', Qgis.MessageLevel.Warning)
+            # QgsMessageLog().logMessage(str(e), tag='AlgoMaps', level=Qgis.MessageLevel.Warning)
             # pass
 
     def clicked_batch_process(self):
@@ -865,8 +932,8 @@ class AlgoMapsPlugin:
         # TODO: check if save as csv and filepath not empty
 
         if DEBUG_MODE:
-            QgsMessageLog.logMessage('CLICKED PROCESS', 'AlgoMaps', Qgis.MessageLevel.Info)
-            QgsMessageLog.logMessage(f'COLUMN ROLES:\n{column_roles}', 'AlgoMaps', Qgis.MessageLevel.Info)
+            QgsMessageLog().logMessage(message='CLICKED PROCESS', tag='AlgoMaps', level=Qgis.MessageLevel.Info)
+            QgsMessageLog().logMessage(message=f'COLUMN ROLES:\n{column_roles}', tag='AlgoMaps', level=Qgis.MessageLevel.Info)
 
         try:
             from .BatchGeocoder import BatchGeocoder
@@ -876,7 +943,7 @@ class AlgoMapsPlugin:
                                                     u'Cannot initialize batch processing - error in code. Contact the AlgoMaps developers'),
                                                 level=Qgis.MessageLevel.Critical)
             if DEBUG_MODE:
-                QgsMessageLog.logMessage(str(e), 'AlgoMaps', Qgis.MessageLevel.Warning)
+                QgsMessageLog().logMessage(str(e), tag='AlgoMaps', level=Qgis.MessageLevel.Warning)
             return
 
         geocoder = BatchGeocoder(csv_path=self.csv_path,
@@ -908,7 +975,7 @@ class AlgoMapsPlugin:
 
     def txt_sep_changed(self):
         new_sep = self.dockwidget.txt_sep.text()
-        QgsMessageLog.logMessage(f'CHANGED SEP: {new_sep}', 'AlgoMaps', Qgis.MessageLevel.Info)
+        QgsMessageLog().logMessage(message=f'CHANGED SEP: {new_sep}', tag='AlgoMaps', level=Qgis.MessageLevel.Info)
         if not new_sep:  # Empty lineEdit
             return
         if new_sep == '\\':
@@ -920,7 +987,7 @@ class AlgoMapsPlugin:
 
     def txt_quotechar_changed(self):
         new_quote = self.dockwidget.txt_quotechar.text()
-        QgsMessageLog.logMessage(f'CHANGED QUOTECHAR: {new_quote}', 'AlgoMaps', Qgis.MessageLevel.Info)
+        QgsMessageLog().logMessage(message=f'CHANGED QUOTECHAR: {new_quote}', tag='AlgoMaps', level=Qgis.MessageLevel.Info)
         if not new_quote:  # Empty lineEdit
             return
         if len(new_quote) > 1:
@@ -930,8 +997,8 @@ class AlgoMapsPlugin:
 
     def show_csv_table(self, csv_path, sep=',', header_type=None, quotechar='"'):
         if DEBUG_MODE:
-            QgsMessageLog.logMessage(f'SHOW TABLE', 'AlgoMaps', Qgis.MessageLevel.Info)
-            QgsMessageLog.logMessage(f'{csv_path} {sep} {header_type} {quotechar}', 'AlgoMaps', Qgis.MessageLevel.Info)
+            QgsMessageLog().logMessage(message=f'SHOW TABLE', tag='AlgoMaps', level=Qgis.MessageLevel.Info)
+            QgsMessageLog().logMessage(message=f'{csv_path} {sep} {header_type} {quotechar}', tag='AlgoMaps', level=Qgis.MessageLevel.Info)
 
         #  Read the first 4 rows (to examine the columns and set the DQ parameters)
         import pandas as pd
@@ -984,3 +1051,43 @@ class AlgoMapsPlugin:
         self.dockwidget.tableWidget_batch.setVisible(True)
         self.dockwidget.group_csv_info.setVisible(True)
         self.dockwidget.group_batch.setVisible(True)
+
+    def _msg_install_clicked(self, val):
+        if val == QMessageBox.Ok:
+
+            if DEBUG_MODE:
+                QgsMessageLog().logMessage(message='User confirmed modules install',
+                                         tag='AlgoMaps',
+                                         level=Qgis.MessageLevel.Info)
+
+            # Check pandas import
+            try:
+                import pandas as pd
+            except ModuleNotFoundError as e:
+
+                QgsMessageLog().logMessage(message='Installing pandas...', level=Qgis.MessageLevel.Info)
+                ret_code = self.install_module('pandas>=1.3.0', upgrade=True)
+                if ret_code == 0:
+                    self.iface.messageBar().pushMessage(self.tr(u'AlgoMaps'),
+                                                        self.tr(
+                                                            u'New module `pandas` installed. Restart QGIS to use '
+                                                            u'AlgoMaps plugin'),
+                                                        level=Qgis.MessageLevel.Warning)
+
+            # Check dq-client import
+            try:
+                import dq
+
+            except ModuleNotFoundError as e:
+
+                QgsMessageLog().logMessage(message='Installing dq-client...', level=Qgis.MessageLevel.Info)
+                ret_code_dq = self.install_module('dq-client', upgrade=False)
+                QgsMessageLog().logMessage(message='Installing requests...', level=Qgis.MessageLevel.Info)
+                ret_code_r = self.install_module('requests', upgrade=True)
+
+                if ret_code_dq == 0 and ret_code_r == 0:
+                    self.iface.messageBar().pushMessage(self.tr(u'AlgoMaps'),
+                                                        self.tr(
+                                                            u'New module `dq-client` installed. Restart QGIS to use '
+                                                            u'AlgoMaps plugin'),
+                                                        level=Qgis.MessageLevel.Warning)
