@@ -818,11 +818,11 @@ class AlgoMapsPlugin:
             if DEBUG_MODE:
                 QgsMessageLog.logMessage(f'Separator: {sep} / Quotechar: {quotechar}', 'AlgoMaps', Qgis.MessageLevel.Info)
 
-            self.batch_sep = str(sep)
-            self.batch_quote = str(quotechar)
+            self.batch_sep = str(sep) if sep else ','
+            self.batch_quote = str(quotechar) if quotechar else '"'
             self.batch_header_type = identify_header(self.csv_path, sep=sep)
-            self.dockwidget.txt_sep.setText(str(sep))
-            self.dockwidget.txt_quotechar.setText(str(quotechar))
+            self.dockwidget.txt_sep.setText(self.batch_sep)
+            self.dockwidget.txt_quotechar.setText(self.batch_quote)
 
             self.show_csv_table(self.csv_path, sep=self.batch_sep, header_type=self.batch_header_type, quotechar=self.batch_quote)
 

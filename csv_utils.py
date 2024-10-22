@@ -1,9 +1,14 @@
 def identify_delimiter_and_quotechar(filename):
     import csv
     sniffer = csv.Sniffer()
-    with open(filename) as fp:
-        sniffed = sniffer.sniff(fp.read(5000))
-    return sniffed.delimiter, sniffed.quotechar
+    try:
+        with open(filename) as fp:
+            sniffed = sniffer.sniff(fp.read(5000))
+        return sniffed.delimiter, sniffed.quotechar
+
+    except Exception as e:
+        if 'could not determine delimiter' in str(e).lower():
+            return None, None
 
 
 def identify_header(path, n=5, th=0.9, sep=None):
