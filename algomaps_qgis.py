@@ -23,7 +23,7 @@
 """
 from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication, Qt
 from qgis.PyQt.QtGui import QIcon
-from qgis.PyQt.QtWidgets import QAction, QTableWidgetItem, QComboBox
+from qgis.PyQt.QtWidgets import QAction, QTableWidgetItem, QComboBox, QMessageBox
 
 from qgis.core import (
     QgsApplication,
@@ -833,7 +833,35 @@ class AlgoMapsPlugin:
 
     def clicked_batch_process(self):
         column_roles = [cb.currentText() for cb in self.batch_combo_widgets]
-        # TODO: check roles
+
+        required_cols = ['DANE_OGOLNE', 'KOD_POCZTOWY', 'MIEJSCOWOSC']
+        any_value = any(item in required_cols for item in column_roles)
+
+        # Check 1: At least one of `DANE_OGOLNE`, `KOD_POCZTOWY` or `MIEJSCOWOSC` is present
+        if not any_value:
+            msg_box = QMessageBox()
+            msg_box.setIcon(QMessageBox.Warning)
+            msg_box.setWindowTitle(f"Brak wymaganych kolumn")  # nazwa bez nr wersji
+            msg_box.setText("Musisz wybrać co najmniej jedną z kolumn: (DANE_OGOLNE, KOD_POCZTOWY, MIEJSCOWOSC)")
+            msg_box.setStandardButtons(QMessageBox.Ok)
+            msg_box.exec()
+            return
+
+        # Check 2: Duplicates
+        duplicates = []
+        for role in column_roles:
+            if column_roles.count(role) > 1 and role not in duplicates and role not in ('PRZEPISZ', 'POMIN'):
+                duplicates.append(role)
+
+        if len(duplicates) > 0:
+            msg_box = QMessageBox()
+            msg_box.setIcon(QMessageBox.Warning)
+            msg_box.setWindowTitle(f"Zduplikowane kolumny")  # nazwa bez nr wersji
+            msg_box.setText(f"Kolumny (z wyjątkiem POMIN i PRZEPISZ) nie mogą się powtarzać! \n\nDuplikaty: {duplicates}")
+            msg_box.setStandardButtons(QMessageBox.Ok)
+            msg_box.exec()
+            return
+
         # TODO: check if save as csv and filepath not empty
 
         if DEBUG_MODE:

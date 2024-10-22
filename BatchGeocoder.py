@@ -226,7 +226,7 @@ class BatchGeocoder(QgsTask):
             try:
                 df = pd.read_csv(self.csv_path, header=self.header_type, sep=self.sep, engine='python',
                                  quotechar=self.quotechar, escapechar='\\',
-                                 on_bad_lines='warn')  # TODO: function [partial(...)] instead of warn
+                                 on_bad_lines='warn')  # TODO: function [partial(...)] instead of warn -> msgBox
                 QgsMessageLog.logMessage(f"CSV contains some errors, skipped these lines", 'AlgoMaps',
                                          Qgis.MessageLevel.Warning)
             except pd.errors.ParserWarning as e:
@@ -252,6 +252,11 @@ class BatchGeocoder(QgsTask):
         # DataFrame processing
         if DEBUG_MODE:
             QgsMessageLog.logMessage("PROCESS DATAFRAME...", 'AlgoMaps', level=Qgis.MessageLevel.Info)
+
+        if 'ID_REKORDU' not in self.column_roles:  # Use pandas index if ID_REKORDU is not present
+            df = df.reset_index(drop=False)
+            self.column_roles.insert(0, 'ID_REKORDU')
+
         col_names = list(df.columns)
         cols_dict = dict(zip(col_names, self.column_roles))
 
