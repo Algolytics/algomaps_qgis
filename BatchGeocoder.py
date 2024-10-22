@@ -17,8 +17,13 @@ from qgis.PyQt.QtCore import QObject, pyqtSignal
 
 from .algomaps_qgis_dockwidget import AlgoMapsPluginDockWidget
 
+from typing import Optional
+import tempfile
+
 DEBUG_MODE = True  # Verbose messages
-TEMP_OUT_CSV = 'temp.csv'  # Ścieżka do pliku csv z wystandaryzowanymi i zgeokodowanymi adresami
+
+TEMP_DIR = tempfile.gettempdir()
+TEMP_OUT_CSV = os.path.join(TEMP_DIR, 'algosm_temp_batch.csv')  # Temporary batch output file
 
 
 # def _read_csv(csv_path, header_type=None, sep=None, quotechar='"'):
@@ -55,9 +60,9 @@ TEMP_OUT_CSV = 'temp.csv'  # Ścieżka do pliku csv z wystandaryzowanymi i zgeok
 
 class BatchGeocoder(QgsTask):
     def __init__(self, csv_path: str, column_roles: list, iface: QgisInterface,
-                 dock_handle: AlgoMapsPluginDockWidget = None, qproj: QgsProject = None, dq_user: str = '',
-                 dq_token: str = '', flags: dict = None, save_csv_path: str | None = None,
-                 header_type: str | None = None, add_to_map: bool = True, sep: str = None, quote: str = '"'):
+                 dock_handle: AlgoMapsPluginDockWidget, qproj: QgsProject, dq_user: str = '',
+                 dq_token: str = '', flags: Optional[dict] = None, save_csv_path: Optional[str] = None,
+                 header_type: Optional[str] = None, add_to_map: bool = True, sep: Optional[str] = None, quote: str = '"'):
         super().__init__("AlgoMaps batch geocoding", QgsTask.CanCancel)
 
         self.csv_path = csv_path
