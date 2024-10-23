@@ -90,7 +90,7 @@ def _get_package_manager_command():
         os_info = platform.freedesktop_os_release().get('ID', 'linux')
         if os_info in ('ubuntu', 'debian', 'linuxmint', 'kubuntu', 'xubuntu', 'lubuntu', 'pop', 'peppermint', 'mx'):
             return ['apt', 'install']
-        if os_info in ('fedora', 'centos', 'rhel'):
+        if os_info in ('fedora', 'centos', 'rhel', 'fedoraremixforwsl'):
             return ['yum', 'install']
         if os_info in ('arch', 'manjaro'):
             return ['pacman', '-S']
@@ -242,15 +242,29 @@ class AlgoMapsPlugin:
                 QgsMessageLog().logMessage(message=f'Trying to install pip...',
                                            tag='AlgoMaps',
                                            level=Qgis.MessageLevel.Info)
-                # Install pip
-                wget_res = subprocess.run(['wget', 'algomaps_get-pip.py', 'https://bootstrap.pypa.io/get-pip.py'])
-                pip_res = subprocess.run([find_python(), 'algomaps_get-pip.py'])
+                # Install pip via official get-pip.py script
+                print('Try to install pip via official get-pip.py script')
+
+                d_script = "import urllib.request; import os; urllib.request.urlretrieve('https://bootstrap.pypa.io/get-pip.py', 'algomaps_get-pip.py'); print(os.getcwd()); print('OK')"
+                try:
+                    download_pip_python = subprocess.run(
+                        [sys.executable,
+                         '-c',
+                         d_script
+                         ]
+                    )
+                    install_pip_res = subprocess.run([find_python(), 'algomaps_get-pip.py'])
+                except:
+                    print('ERRORS! download pip and install get-pip.py')
+                    return
 
                 # Check if pip has been installed
-                if wget_res.returncode == 0 and pip_res.returncode == 0:
-                    subprocess.run(['rm', 'algomaps_get-pip.py'])  # cleanup
+                if download_pip_python.returncode == 0 and install_pip_res.returncode == 0:
+                    subprocess.run(['rm', '~/algomaps_get-pip.py'])  # cleanup
+                    print('OK, installed pip')
                 else:
                     # Try to install pip with apt/other package manager
+                    print('Try to install pip with apt/other package manager')
                     package_manager_cmd = _get_package_manager_command()
                     args_list = [*package_manager_cmd,
                                  'python3-pip',
@@ -260,13 +274,16 @@ class AlgoMapsPlugin:
                         args_list = [*package_manager_cmd, 'python-pip']
 
                     apt_res = subprocess.run(args_list)
+                    print(args_list)
                     if apt_res.returncode == 0:
                         # Installed pip
+                        print('Return 0 - installed pip!')
                         ...
                     else:
                         QgsMessageLog().logMessage(message=f'Could not install pip to install modules. Try to execute '
                                                            f'the troubleshooting steps (README.md) or contact the '
-                                                           f'developer team (e.g. post an issue on GitHub)!',
+                                                           f'developer team (e.g. post an issue on GitHub). You can use'
+                                                           f' the plugin but Batch functionality will not work.',
                                                    tag='AlgoMaps',
                                                    level=Qgis.MessageLevel.Critical)
                         return
