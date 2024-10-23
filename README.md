@@ -21,9 +21,8 @@ Więcej informacji: https://algomaps.pl/
 
 1. Zainstaluj wtyczkę w programie QGIS (Wtyczki -> Zarządzanie wtyczkami -> Instaluj z pliku zip). Przy ostrzeżeniu
    bezpieczeństwa naciśnij  "Tak".
-2. Włącz wtyczkę zaznaczając checkbox przy nazwie AlgoMaps (Wtyczki -> Zarządzanie wtyczkami -> Zainstalowane). Może to
-   zająć parę chwil, w tym czasie okno QGIS może nie odpowiadać.
-3. Uruchom QGIS ponownie.
+2. Upewnij się, że wtyczka jest włączona  zaznaczając checkbox przy nazwie AlgoMaps (Wtyczki -> Zarządzanie wtyczkami -> Zainstalowane).
+3. Jeśli pojawi się okno instalacji dodatkowych bibliotek, naciśnij OK i poczekaj kilka chwil na instalację. Następnie uruchom QGIS ponownie.
 4. Uruchom wtyczkę klikając jej ikonę na pasku narzędzi - powinien pojawić się dokowalny panel AlgoMaps.
 5. Przejdź do zakładki "Ustawienia" i uzupełnij swoje dane przed rozpoczęciem korzystania z wtyczki:
 
@@ -85,9 +84,8 @@ More information: https://algomaps.pl/
 
 1. Install the plugin in QGIS (Plugins -> Manage and Install Plugins -> Install from ZIP file). When the security
    warning appears, click "Yes".
-2. Enable the plugin by checking the box next to AlgoMaps (Plugins -> Manage and Install Plugins -> Installed). This may
-   take a moment, during which the QGIS window may become unresponsive.
-3. Restart QGIS.
+2. Make sure the plugin is enabled by checking the box next to AlgoMaps (Plugins -> Manage and Install Plugins -> Installed).
+3. If a dialog appears asking to install additional Python modules, click OK and wait a few moments for the installation. Restart QGIS afterwards.
 4. Launch the plugin by clicking its icon on the toolbar - a dockable AlgoMaps panel should appear.
 5. Go to the "Settings" tab and enter your information before using the plugin:
 
