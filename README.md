@@ -1,6 +1,7 @@
 # AlgoMaps QGIS plugin
 
-Standaryzacja i geokodowanie adresów | Address standarization and geocoding
+PL: Standaryzacja i geokodowanie adresów  
+EN: Address standarization and geocoding
 
 ---
 
@@ -108,9 +109,7 @@ aby możliwe było przeprocesowanie wierszy o tych samych informacjach rozłożo
 
 TODO
 
-### Dziennik zmian
-
-TODO
+### [Dziennik zmian](CHANGELOG.md)
 
 ---
 
@@ -171,12 +170,45 @@ Batch processing:
 
 ### Batch processing
 
-TODO
+The function of a column (or its “role”) specifies the type of data contained in a given column of the input file. Each column in the input file can have only one function. Each function in the input file can appear only once. The exceptions are the COPY and SKIP functions, which can appear multiple times.
+
+If a given row does not use a particular function (e.g., the house number is not provided), the value of the column in that row should be empty.
+
+Columns can have the following functions:
+
+- Neutral variable
+  - `PRZEPISZ` (`COPY`) – copies the variable to the output file
+  - `POMIN` (`SKIP`) – does not copy the variable to the output file
+- Identifier
+  - `ID_REKORDU` (`RECORD_ID`)
+- Unspecified variable
+  - `DANE_OGOLNE` (`GENERAL_DATA`) – the variable will be analyzed for all possible address information
+- Address variable
+  - `KOD_POCZTOWY` (`POSTAL_CODE`)
+  - `MIEJSCOWOSC` (`CITY`)
+  - `ULICA_NUMER_DOMU_I_MIESZKANIA` (`STREET_HOUSE_AND_APARTMENT_NUMBER`)
+  - `ULICA` (`STREET`)
+  - `NUMER_DOMU` (`HOUSE_NUMBER`)
+  - `NUMER_MIESZKANIA` (`APARTMENT_NUMBER`)
+  - `NUMER_DOMU_I_MIESZKANIA` (`HOUSE_AND_APARTMENT_NUMBER`)
+  - `WOJEWODZTWO` (`VOIVODESHIP`)
+  - `POWIAT` (`COUNTY`)
+  - `GMINA` (`MUNICIPALITY`)
+
+Rules:
+
+- To start processing, at least one of the columns: `DANE_OGOLNE`, `KOD_POCZTOWY`, or `MIEJSCOWOSC` is required.
+- If the `ULICA` column exists, all information in `ULICA_NUMER_DOMU_I_MIESZKANIA` is ignored.
+- If the `NUMER_DOMU` column exists, all information about the house and apartment number from `ULICA_NUMER_DOMU_I_MIESZKANIA` and `NUMER_DOMU_I_MIESZKANIA` is ignored.
+- If the `NUMER_DOMU` column does not exist, the `NUMER_MIESZKANIA` column is ignored.
+- If the `ULICA` column does not exist and the `ULICA_NUMER_DOMU_I_MIESZKANIA` column exists, the `NUMER_DOMU_I_MIESZKANIA` column is ignored.
+- If any of the columns (`KOD_POCZTOWY`, `MIEJSCOWOSC`, `ULICA_NUMER_DOMU_I_MIESZKANIA`, `ULICA`, `NUMER_DOMU`, `NUMER_DOMU_I_MIESZKANIA`) exist, the DANE_OGOLNE column is ignored.
+
+It is acceptable to send several columns with functions containing the same information (e.g., apartment number), but 
+the user should ensure that such information is not duplicated in multiple columns. This functionality is intended to allow processing rows with the same information distributed in columns with different functions.
 
 ### Troubleshooting
 
 TODO
 
-### Changelog
-
-TODO
+### [Change log](CHANGELOG.md)

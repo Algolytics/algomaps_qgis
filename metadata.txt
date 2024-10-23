@@ -5,27 +5,41 @@
 [general]
 name=AlgoMaps
 qgisMinimumVersion=3.12
-description=Plugin Algolytics do standaryzacji danych adresowych i geokodowania
-version=0.1.3
+description=PL: Plugin Algolytics do standaryzacji danych adresowych i geokodowania EN: Algolytics Plugin for Address Data Standardization and Geocoding
+version=0.1.4
 author=Algolytics Technologies
 email=info@algolytics.pl
 
 about=PL: Plugin Algolytics do standaryzacji polskich danych adresowych i geokodowania EN: Algolytics QGIS plugin for Polish address standarization and geocoding
 
-tracker=http://bugs
-repository=http://repo
+tracker=https://github.com/Algolytics/algomaps_qgis/issues
+repository=https://github.com/Algolytics/algomaps_qgis
 # End of mandatory metadata
 
 # Recommended items:
 
 hasProcessingProvider=no
 # Uncomment the following line and add your changelog:
-# changelog=
+changelog=
+    [v0.1.4]
+        PL
+        - Dodano sprawdzanie ról kolumn dla Batch
+        - Dodano dodatkowe pola wyjściowe dla Batch (z wyjątkiem danych finansowych)
+        - Dodano zaawansowane parsowanie CSV z niestandardowymi separatorami i znakami rozdzielenia tekstu
+        - Instalacja bibliotek Pythona po kliknięciu przycisku na pasku narzędzi i po zgodzie użytkownika
+
+        EN
+        - Added column roles checks for Batch
+        - Added additional output fields for Batch (except financial data)
+        - Added advanced CSV parsing with custom separators and quote characters
+        - Installation of Python libraries AFTER clicking the toolbar button and after user's consent
+
+    More in CHANGELOG.md file
 
 # Tags are comma separated with spaces allowed
-tags=python
+tags=python,address,addresses,geocode,geocoder,geocoding,standarization,python,poland,polska,geokodowanie,adres,standaryzacja
 
-homepage=http://homepage
+homepage=https://algomaps.pl/
 category=Plugins
 icon=icon.png
 # experimental flag
