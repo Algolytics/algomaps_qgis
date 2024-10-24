@@ -103,6 +103,19 @@ def _get_package_manager_command():
         return ['brew', 'install']
 
 
+def version_is_lower(version: str, to_compare: tuple):
+    """
+    A simple function to compare module versions
+    works fine with simple examples like 1.3.10 or 2.0.3a but may produce false results with versions lik
+    0.1rc1 (-> 0.11) or 0.0.3beta2 (-> 0.0.32)
+    """
+    import re
+    ver_str = re.sub(r'[^0-9.]', '', version).split(".")  # Good enough for us
+    ver_tuple = tuple(map(int, ver_str))
+
+    return ver_tuple < to_compare
+
+
 class AlgoMapsPlugin:
     """QGIS Plugin Implementation."""
 
@@ -443,6 +456,12 @@ class AlgoMapsPlugin:
                 try:
                     import pandas as pd
                     import dq
+
+                    # Check Pandas version
+                    version = pd.__version__
+                    if version_is_lower(version, (1, 3, 0)):
+                        raise ModuleNotFoundError
+
                 except ModuleNotFoundError as e:
                     msg_box = QMessageBox()
                     msg_box.setIcon(QMessageBox.Question)
@@ -1052,6 +1071,12 @@ class AlgoMapsPlugin:
             # Check pandas import
             try:
                 import pandas as pd
+
+                # Check Pandas version
+                version = pd.__version__
+                if version_is_lower(version, (1, 3, 0)):
+                    raise ModuleNotFoundError
+
             except ModuleNotFoundError as e:
 
                 QgsMessageLog().logMessage(message='Installing pandas...', level=Qgis.MessageLevel.Info)
