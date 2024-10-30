@@ -20,7 +20,7 @@ from .algomaps_qgis_dockwidget import AlgoMapsPluginDockWidget
 from typing import Optional
 import tempfile
 
-DEBUG_MODE = True  # Verbose messages
+DEBUG_MODE = False  # Verbose messages
 
 TEMP_DIR = tempfile.gettempdir()
 TEMP_OUT_CSV = os.path.join(TEMP_DIR, 'algosm_temp_batch.csv')  # Temporary batch output file
@@ -284,7 +284,8 @@ class BatchGeocoder(QgsTask):
             self.exception = e
             return False
 
-        QgsMessageLog.logMessage(f"Total elements (correct records) in csv: {len(df)}",
+        if DEBUG_MODE:
+            QgsMessageLog.logMessage(f"Total elements (correct records) in csv: {len(df)}",
                                  tag='AlgoMaps',
                                  level=Qgis.MessageLevel.Info)
 
@@ -345,9 +346,10 @@ class BatchGeocoder(QgsTask):
             # Move to user's CSV or else remove the temporary CSV
             if self.save_csv_path:
                 os.replace(TEMP_OUT_CSV, self.save_csv_path)
-                QgsMessageLog.logMessage(f"Zapisano plik {self.save_csv_path}",
-                                         'AlgoMaps',
-                                         Qgis.MessageLevel.Info)
+                if DEBUG_MODE:
+                    QgsMessageLog.logMessage(f"Zapisano plik {self.save_csv_path}",
+                                             'AlgoMaps',
+                                             Qgis.MessageLevel.Info)
             else:
                 os.remove(TEMP_OUT_CSV)
             return True
@@ -358,7 +360,8 @@ class BatchGeocoder(QgsTask):
 
     def finished(self, result):
         if result:
-            QgsMessageLog.logMessage("SUKCES.", 'AlgoMaps', Qgis.MessageLevel.Success)
+            if DEBUG_MODE:
+                QgsMessageLog.logMessage("SUKCES.", 'AlgoMaps', Qgis.MessageLevel.Success)
             if self.dock_handle:
                 import json
                 job_report_str = str(self.report_dq).replace("'", '"')
@@ -390,5 +393,6 @@ class BatchGeocoder(QgsTask):
             self.dock_handle.btn_batch_process.setText('Rozpocznij przetwarzanie')
 
     def cancel(self):
-        QgsMessageLog.logMessage('Task was canceled', 'AlgoMaps', Qgis.Info)
+        if DEBUG_MODE:
+            QgsMessageLog.logMessage('Task canceled', 'AlgoMaps', Qgis.Info)
         super().cancel()

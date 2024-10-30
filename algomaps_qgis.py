@@ -46,15 +46,15 @@ import sys
 import json
 
 CONFIG_PATH = 'dq_config.json'
-DEBUG_MODE = True  # Verbose messages
+DEBUG_MODE = False  # Verbose messages
 
 
 def find_python():
     def _log_python_path(ppath, tag='-'):
         if DEBUG_MODE:
             QgsMessageLog().logMessage(message=f'[{tag}] Found python executable: {ppath}',
-                                     tag='AlgoMaps',
-                                     level=Qgis.MessageLevel.Info)
+                                       tag='AlgoMaps',
+                                       level=Qgis.MessageLevel.Info)
         pass
 
     import platform
@@ -224,9 +224,10 @@ class AlgoMapsPlugin:
 
         import subprocess
 
-        QgsMessageLog().logMessage(message=f'Install {module_name}',
-                                   tag='AlgoMaps',
-                                   level=Qgis.MessageLevel.Info)
+        if DEBUG_MODE:
+            QgsMessageLog().logMessage(message=f'Install {module_name}',
+                                       tag='AlgoMaps',
+                                       level=Qgis.MessageLevel.Info)
 
         arg_list = [find_python(), '-m', 'pip', 'install', module_name]
         if upgrade:
@@ -244,21 +245,26 @@ class AlgoMapsPlugin:
                                 stderr=subprocess.STDOUT)
 
         return_code = result.returncode
-        QgsMessageLog().logMessage(message=f'Return code: {return_code}',
-                                   tag='AlgoMaps',
-                                   level=Qgis.MessageLevel.Info)
+
+        if DEBUG_MODE:
+            QgsMessageLog().logMessage(message=f'Return code: {return_code}',
+                                       tag='AlgoMaps',
+                                       level=Qgis.MessageLevel.Info)
 
         if return_code == 1:
             pip_message = result.stdout.decode(encoding="utf-8").lower()
 
             if 'no module named pip' in pip_message:
-                QgsMessageLog().logMessage(message=f'Trying to install pip...',
-                                           tag='AlgoMaps',
-                                           level=Qgis.MessageLevel.Info)
-                # Install pip via official get-pip.py script
-                print('Try to install pip via official get-pip.py script')
 
-                d_script = "import urllib.request; import os; urllib.request.urlretrieve('https://bootstrap.pypa.io/get-pip.py', 'algomaps_get-pip.py'); print(os.getcwd()); print('OK')"
+                if DEBUG_MODE:
+                    QgsMessageLog().logMessage(message=f'Trying to install pip...',
+                                               tag='AlgoMaps',
+                                               level=Qgis.MessageLevel.Info)
+
+                # Install pip via official get-pip.py script
+                # print('Try to install pip via official get-pip.py script')
+
+                d_script = "import urllib.request; import os; urllib.request.urlretrieve('https://bootstrap.pypa.io/get-pip.py', 'algomaps_get-pip.py')"
                 try:
                     download_pip_python = subprocess.run(
                         [sys.executable,
@@ -268,16 +274,22 @@ class AlgoMapsPlugin:
                     )
                     install_pip_res = subprocess.run([find_python(), 'algomaps_get-pip.py'])
                 except:
-                    print('ERRORS! download pip and install get-pip.py')
+                    QgsMessageLog().logMessage(message=f'Could not install pip to install modules. Try to execute '
+                                                       f'the troubleshooting steps (README.md) or contact the '
+                                                       f'developer team (e.g. post an issue on GitHub). You can use'
+                                                       f' the plugin but Batch functionality will not work.',
+                                               tag='AlgoMaps',
+                                               level=Qgis.MessageLevel.Critical)
+                    # print('ERRORS! download pip and install get-pip.py')
                     return
 
                 # Check if pip has been installed
                 if download_pip_python.returncode == 0 and install_pip_res.returncode == 0:
                     subprocess.run(['rm', '~/algomaps_get-pip.py'])  # cleanup
-                    print('OK, installed pip')
+                    # print('OK, installed pip')
                 else:
                     # Try to install pip with apt/other package manager
-                    print('Try to install pip with apt/other package manager')
+                    # print('Try to install pip with apt/other package manager')
                     package_manager_cmd = _get_package_manager_command()
                     args_list = [*package_manager_cmd,
                                  'python3-pip',
@@ -287,12 +299,8 @@ class AlgoMapsPlugin:
                         args_list = [*package_manager_cmd, 'python-pip']
 
                     apt_res = subprocess.run(args_list)
-                    print(args_list)
-                    if apt_res.returncode == 0:
-                        # Installed pip
-                        print('Return 0 - installed pip!')
-                        ...
-                    else:
+                    # print(args_list)
+                    if apt_res.returncode != 0:
                         QgsMessageLog().logMessage(message=f'Could not install pip to install modules. Try to execute '
                                                            f'the troubleshooting steps (README.md) or contact the '
                                                            f'developer team (e.g. post an issue on GitHub). You can use'
@@ -685,7 +693,8 @@ class AlgoMapsPlugin:
             return response.json()[0]
         else:
             self.iface.messageBar().pushMessage(self.tr(u'AlgoMaps'),
-                                                self.tr(u'Could not fetch the data from server, check the settings'),
+                                                self.tr(u'Nie udało się pobrać danych. Sprawdź poprawność klucza API w '
+                                                        u'Ustawieniach'),
                                                 level=Qgis.MessageLevel.Critical)
             return None
 
@@ -1011,7 +1020,8 @@ class AlgoMapsPlugin:
 
     def txt_sep_changed(self):
         new_sep = self.dockwidget.txt_sep.text()
-        QgsMessageLog().logMessage(message=f'CHANGED SEP: {new_sep}', tag='AlgoMaps', level=Qgis.MessageLevel.Info)
+        if DEBUG_MODE:
+            QgsMessageLog().logMessage(message=f'CHANGED SEP: {new_sep}', tag='AlgoMaps', level=Qgis.MessageLevel.Info)
         if not new_sep:  # Empty lineEdit
             return
         if new_sep == '\\':
@@ -1023,7 +1033,8 @@ class AlgoMapsPlugin:
 
     def txt_quotechar_changed(self):
         new_quote = self.dockwidget.txt_quotechar.text()
-        QgsMessageLog().logMessage(message=f'CHANGED QUOTECHAR: {new_quote}', tag='AlgoMaps', level=Qgis.MessageLevel.Info)
+        if DEBUG_MODE:
+            QgsMessageLog().logMessage(message=f'CHANGED QUOTECHAR: {new_quote}', tag='AlgoMaps', level=Qgis.MessageLevel.Info)
         if not new_quote:  # Empty lineEdit
             return
         if len(new_quote) > 1:
