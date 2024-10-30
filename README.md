@@ -106,7 +106,33 @@ aby możliwe było przeprocesowanie wierszy o tych samych informacjach rozłożo
 
 ### Rozwiązywanie problemów
 
-TODO
+*(Jeśli lub nie widzisz swojego problemu poniżej lub jeśli nie zostanie on rozwiązany po wykonaniu poniższych kroków, 
+zgłoś tę sytuację do zepsołu Algolytics np.używając opcji "Issues")*
+
+**Q:** Nie mogę zainstalować dodatkowych bibliotek przy uruchomieniu wtyczki. W panelu "Komunikaty" w zakładce "AlgoMaps" 
+otrzymałem tekst `Could not install pip to install modules (...)`.
+
+**A:**  Jeśli używasz systemu Windows lub MacOS - przeinstaluj QGIS i spróbuj ponownie. Upewnij się, że przy instalacji zaznaczyłeś 
+opcję zainstalowania języka Python.
+
+
+Jeśli używasz systemu Linux wypróbuj następujące kroki:
+
+```bash
+sudo apt update 
+sudo apt install python3-pip
+```
+
+lub
+
+```bash
+sudo apt-get update 
+sudo apt-get install python3-pip
+```
+
+lub wykorzystaj analogiczny package manager (np. `yum` dla Fedora Linux).
+
+
 
 ### [Dziennik zmian](CHANGELOG.md)
 
@@ -166,8 +192,11 @@ Batch processing:
 9. Copy the "API access key".
 10. Return to QGIS and paste the access key into the "API key" field.
 
-### Batch processing
+### Using batch processing
 
+#### 
+
+#### Column functions (roles)
 The function of a column (or its “role”) specifies the type of data contained in a given column of the input file. Each column in the input file can have only one function. Each function in the input file can appear only once. The exceptions are the COPY and SKIP functions, which can appear multiple times.
 
 If a given row does not use a particular function (e.g., the house number is not provided), the value of the column in that row should be empty.
@@ -207,6 +236,29 @@ the user should ensure that such information is not duplicated in multiple colum
 
 ### Troubleshooting
 
-TODO
+*(If you do not see your problem below or if it is not resolved after following the steps below, report this situation 
+to the Algolytics team, e.g., using the GitHub “Issues” option)*
 
-### [Change log](CHANGELOG.md)
+**Q:** I cannot install additional libraries when launching the plugin. In the “Log Messages” panel under the “AlgoMaps” 
+tab, I received the text `Could not install pip to install modules (...)`.
+
+**A:** If you are using Windows or MacOS - reinstall QGIS and try again. Make sure you selected the option to install 
+Python during the installation.
+
+If you are using Linux, try the following steps:
+
+```bash
+sudo apt update 
+sudo apt install python3-pip
+```
+
+or
+
+```bash
+sudo apt-get update 
+sudo apt-get install python3-pip
+```
+
+or use an analogous package manager (e.g., `yum` for Fedora Linux).
+
+### [Changelog](CHANGELOG.md)
