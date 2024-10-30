@@ -2,7 +2,7 @@
 
 ## PL
 
-### 0.1.4 (2024-10-24)
+### 0.1.4 (2024-10-30)
 
 - Dodano sprawdzanie ról kolumn dla Batch
 - Dodano dodatkowe pola wyjściowe dla Batch (z wyjątkiem danych finansowych)
@@ -39,7 +39,7 @@ ___
 
 ## EN
 
-### 0.1.4 (2024-10-23)
+### 0.1.4 (2024-10-30)
 
 - Added column roles checks for Batch
 - Added additional output fields for Batch (except financial data)
